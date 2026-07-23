@@ -10,3 +10,11 @@ node_modules
 # Next.js build output
 .next
 .env*
+
+# Next.js extras
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+.DS_Store
+npm-debug.log*

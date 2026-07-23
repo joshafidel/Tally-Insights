@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/*
+  Tally Insights theme.
+  Brand is light purple. Red, blue, and teal are reserved for party
+  affiliation only (R, D, I) and must never be used for status, errors,
+  buttons, or anything else.
+*/
+:root {
+  --background: #faf8fd;
+  --foreground: #241b33;
+  --muted: #6b6478;
+  --card: #ffffff;
+  --border: #e2dbee;
+
+  --brand-50: #f6f3fb;
+  --brand-100: #ede7f7;
+  --brand-200: #dcd1ef;
+  --brand-300: #c3aee3;
+  --brand-400: #a588d4;
+  --brand-500: #8a63c6;
+  --brand-600: #7147b0;
+  --brand-700: #5c3792;
+  --brand-800: #4a2d75;
+  --brand-900: #3a2459;
+
+  /* Sentiment strength ramp, light to deep purple, for values 1 to 5 */
+  --sentiment-1: #ede7f7;
+  --sentiment-2: #cdbae8;
+  --sentiment-3: #a588d4;
+  --sentiment-4: #7c50ba;
+  --sentiment-5: #532f8f;
+
+  /* Party colors, reserved exclusively for party affiliation */
+  --party-r: #d8473d;
+  --party-d: #3e6fde;
+  --party-i: #1f9e82;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+  --color-sentiment-1: var(--sentiment-1);
+  --color-sentiment-2: var(--sentiment-2);
+  --color-sentiment-3: var(--sentiment-3);
+  --color-sentiment-4: var(--sentiment-4);
+  --color-sentiment-5: var(--sentiment-5);
+  --color-party-r: var(--party-r);
+  --color-party-d: var(--party-d);
+  --color-party-i: var(--party-i);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
