@@ -2,11 +2,11 @@ import Link from "next/link";
 import type { OrgContext } from "@/lib/org";
 
 const NAV = [
-  { label: "Overview", href: (d: string) => `/districts/${d}`, built: true },
-  { label: "Officials", href: (d: string) => `/districts/${d}/officials`, built: false },
-  { label: "Watchlist and alerts", href: (d: string) => `/districts/${d}/watchlist`, built: false },
-  { label: "Methodology", href: () => `/methodology`, built: false },
-  { label: "Admin", href: () => `/admin`, built: false },
+  { label: "Overview", href: (d: string) => `/districts/${d}` },
+  { label: "Officials", href: (d: string) => `/districts/${d}/officials` },
+  { label: "Watchlist and alerts", href: (d: string) => `/districts/${d}/watchlist` },
+  { label: "Methodology", href: (d: string) => `/methodology?district=${d}` },
+  { label: "Admin", href: (d: string) => `/admin?district=${d}` },
 ];
 
 export function AppShell({
@@ -31,32 +31,39 @@ export function AppShell({
               Tally Insights
             </Link>
             <nav className="hidden items-center gap-5 md:flex">
-              {NAV.map((item) =>
-                item.built ? (
-                  <Link
-                    key={item.label}
-                    href={item.href(districtId)}
-                    className={
-                      active === item.label
-                        ? "border-b-2 border-brand-600 pb-0.5 text-sm font-medium text-brand-800"
-                        : "text-sm text-muted hover:text-brand-700"
-                    }
-                  >
-                    {item.label}
-                  </Link>
-                ) : (
-                  <span
-                    key={item.label}
-                    className="cursor-default text-sm text-muted/60"
-                    title="Arrives in a later checkpoint"
-                  >
-                    {item.label}
-                  </span>
-                )
-              )}
+              {NAV.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href(districtId)}
+                  className={
+                    active === item.label
+                      ? "border-b-2 border-brand-600 pb-0.5 text-sm font-medium text-brand-800"
+                      : "text-sm text-muted hover:text-brand-700"
+                  }
+                >
+                  {item.label}
+                </Link>
+              ))}
             </nav>
           </div>
           <div className="flex items-center gap-4">
+            {ctx.entitledDistricts.length > 1 && (
+              <div className="hidden items-center gap-1 rounded-md border border-border bg-white p-0.5 md:flex">
+                {ctx.entitledDistricts.map((d) => (
+                  <Link
+                    key={d.id}
+                    href={`/districts/${d.id}`}
+                    className={
+                      d.id === districtId
+                        ? "rounded bg-brand-100 px-2 py-1 text-xs font-medium text-brand-800"
+                        : "rounded px-2 py-1 text-xs text-muted hover:bg-brand-50"
+                    }
+                  >
+                    {d.name}
+                  </Link>
+                ))}
+              </div>
+            )}
             <div className="text-right">
               <div className="text-sm font-medium">{ctx.membership?.orgName}</div>
               <div className="text-xs text-muted">
