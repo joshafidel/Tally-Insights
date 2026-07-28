@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { GUEST_EMAIL, GUEST_PASSWORD } from "@/lib/guest";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
@@ -39,10 +40,18 @@ export async function updateSession(request: NextRequest) {
   );
 
   if (!user && !isPublic) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    // No login barrier: visitors get a silent read only guest session.
+    // RLS treats the guest like any other viewer seat.
+    const { error } = await supabase.auth.signInWithPassword({
+      email: GUEST_EMAIL,
+      password: GUEST_PASSWORD,
+    });
+    if (error) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("next", path);
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

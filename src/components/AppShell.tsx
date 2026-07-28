@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { OrgContext } from "@/lib/org";
+import { isGuestEmail } from "@/lib/guest";
 
 const NAV = [
   { label: "Dashboard", href: () => `/dashboard` },
@@ -70,19 +71,32 @@ export function AppShell({
               </div>
             )}
             <div className="text-right">
-              <div className="text-sm font-medium">{ctx.membership?.orgName}</div>
+              <div className="text-sm font-medium">
+                {isGuestEmail(ctx.user.email)
+                  ? "Guest preview"
+                  : ctx.membership?.orgName}
+              </div>
               <div className="text-xs text-muted">
                 {district ? `${district.name} (${district.state})` : ""}
               </div>
             </div>
-            <form action="/auth/signout" method="post">
-              <button
-                type="submit"
-                className="rounded-md border border-border bg-white px-3 py-1.5 text-sm hover:bg-brand-50"
+            {isGuestEmail(ctx.user.email) ? (
+              <Link
+                href="/login"
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
               >
-                Sign out
-              </button>
-            </form>
+                Team sign in
+              </Link>
+            ) : (
+              <form action="/auth/signout" method="post">
+                <button
+                  type="submit"
+                  className="rounded-md border border-border bg-white px-3 py-1.5 text-sm hover:bg-brand-50"
+                >
+                  Sign out
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </header>
