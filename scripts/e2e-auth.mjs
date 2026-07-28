@@ -20,7 +20,6 @@ await page.goto('http://localhost:3000/', { waitUntil: 'networkidle' });
 console.log('unauthenticated / lands on:', page.url());
 await page.screenshot({ path: outDir + '/shot-login.png', fullPage: true });
 
-await page.click('text=Sign in with a password instead');
 await page.fill('input[type=email]', 'insights-qa-owner@tallycivic.com');
 await page.fill('input[type=password]', 'Qa-Owner-Testing-2026!');
 await page.click('button[type=submit]');

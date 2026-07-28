@@ -11,7 +11,7 @@ function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [usePassword, setUsePassword] = useState(false);
+  const [usePassword, setUsePassword] = useState(true);
   const [status, setStatus] = useState<
     | { kind: "idle" }
     | { kind: "sending" }
@@ -59,8 +59,7 @@ function LoginForm() {
             Tally Insights
           </div>
           <p className="text-sm text-muted">
-            District sentiment intelligence for legislative teams. Sign in with
-            your work email.
+            District sentiment intelligence for legislative teams.
           </p>
         </div>
 
