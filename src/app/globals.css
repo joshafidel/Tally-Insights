@@ -34,7 +34,7 @@
   /* Party colors, reserved exclusively for party affiliation */
   --party-r: #d8473d;
   --party-d: #3e6fde;
-  --party-i: #1f9e82;
+  --party-i: #6b7280;
 }
 
 @theme inline {

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { OrgContext } from "@/lib/org";
 
 const NAV = [
+  { label: "Dashboard", href: () => `/dashboard` },
   { label: "Overview", href: (d: string) => `/districts/${d}` },
   { label: "Officials", href: (d: string) => `/districts/${d}/officials` },
   { label: "Watchlist and alerts", href: (d: string) => `/districts/${d}/watchlist` },

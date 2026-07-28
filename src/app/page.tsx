@@ -31,5 +31,5 @@ export default async function Home() {
     );
   }
 
-  redirect(`/districts/${ctx.entitledDistricts[0].id}`);
+  redirect("/dashboard");
 }

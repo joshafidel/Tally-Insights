@@ -49,7 +49,7 @@ function PartyChip({ party }: { party: string }) {
   );
 }
 
-function Scorecard({ official }: { official: OfficialSummary }) {
+export function Scorecard({ official }: { official: OfficialSummary }) {
   const sorted = [...official.votes].sort(
     (a, b) => (b.gap ?? -1) - (a.gap ?? -1)
   );
