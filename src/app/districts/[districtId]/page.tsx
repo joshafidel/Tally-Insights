@@ -8,6 +8,7 @@ import {
 } from "@/lib/insights";
 import { AppShell } from "@/components/AppShell";
 import { DistBar } from "@/components/DistBar";
+import { PartyFilter } from "@/components/PartyFilter";
 import { SampleSize } from "@/components/Sample";
 import { deltaArrow, formatDelta, statusLabel } from "@/lib/format";
 
@@ -93,19 +94,26 @@ function ItemsTable({
 
 export default async function DistrictPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ districtId: string }>;
+  searchParams: Promise<{ party?: string }>;
 }) {
   const { districtId } = await params;
+  const { party: partyParam } = await searchParams;
+  const party = ["D", "R", "I"].includes(partyParam ?? "")
+    ? (partyParam as "D" | "R" | "I")
+    : undefined;
   const ctx = await getOrgContext();
   if (!ctx) redirect("/login");
   if (!ctx.membership) redirect("/");
   const district = ctx.entitledDistricts.find((d) => d.id === districtId);
   if (!district) notFound();
 
-  const items = await getDistrictOverview(ctx.membership.orgId, districtId);
+  const items = await getDistrictOverview(ctx.membership.orgId, districtId, party);
   await logAccess(ctx.membership.orgId, ctx.user.id, "view", "district_overview", {
     district_id: districtId,
+    party: party ?? "all",
   });
 
   const withData = items.filter((i) => (i.stats?.n ?? 0) > 0);
@@ -144,18 +152,51 @@ export default async function DistrictPage({
     },
   ];
 
+  const partyLabel =
+    party === "D"
+      ? "Democratic"
+      : party === "R"
+        ? "Republican"
+        : party === "I"
+          ? "Independent"
+          : null;
+
   return (
     <AppShell ctx={ctx} districtId={districtId} active="Overview">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-brand-900">
-          {district.name}: district overview
-        </h1>
-        <p className="text-sm text-muted">
-          {items.length} rateable items ({withData.length} with responses,{" "}
-          {totalResponses.toLocaleString("en-US")} total responses in this
-          district). All numbers come from verified constituent ratings in the
-          Tally app on a 1 to 5 agree scale.
-        </p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-brand-900">
+            {district.name}
+          </h1>
+          <p className="text-sm text-muted">
+            {partyLabel
+              ? `${partyLabel} sentiment only. Trend columns reflect all voters.`
+              : "All numbers come from verified constituent ratings in the Tally app on a 1 to 5 agree scale."}
+          </p>
+        </div>
+        <PartyFilter
+          basePath={`/districts/${districtId}`}
+          current={party ?? "all"}
+        />
+      </div>
+
+      <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+        {[
+          { label: "Rateable items", value: items.length },
+          { label: "Items with responses", value: withData.length },
+          { label: partyLabel ? `${partyLabel} responses` : "Total responses", value: totalResponses },
+          { label: "Tracked by your org", value: items.filter((i) => i.tracked).length },
+        ].map((t) => (
+          <div
+            key={t.label}
+            className="rounded-2xl border border-brand-200 bg-gradient-to-b from-card to-brand-50/70 px-5 py-4 shadow-sm"
+          >
+            <div className="text-2xl font-semibold tabular-nums text-brand-800">
+              {t.value.toLocaleString("en-US")}
+            </div>
+            <div className="text-xs uppercase tracking-wide text-muted">{t.label}</div>
+          </div>
+        ))}
       </div>
 
       {movers.length > 0 && (

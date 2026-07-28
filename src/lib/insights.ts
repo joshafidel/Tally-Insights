@@ -137,15 +137,25 @@ export type OverviewItem = CatalogItem & {
   tracked: boolean;
 };
 
-export async function getDistrictOverview(orgId: string, districtId: string) {
+export async function getDistrictOverview(
+  orgId: string,
+  districtId: string,
+  party?: "D" | "R" | "I"
+) {
   const supabase = await createClient();
   const [catalog, { data: stats }, { data: trend }, { data: tracked }] =
     await Promise.all([
       getCatalog(),
-      supabase
-        .from("insights_item_sentiment")
-        .select("*")
-        .eq("district_id", districtId),
+      party
+        ? supabase
+            .from("insights_item_party")
+            .select("*")
+            .eq("district_id", districtId)
+            .eq("party", party)
+        : supabase
+            .from("insights_item_sentiment")
+            .select("*")
+            .eq("district_id", districtId),
       supabase
         .from("insights_item_trend")
         .select("*")
@@ -217,31 +227,51 @@ export async function getItemDetail(
   itemId: string
 ) {
   const supabase = await createClient();
-  const [catalog, { data: stats }, { data: party }, { data: trend }] =
-    await Promise.all([
-      getCatalog(),
-      supabase
-        .from("insights_item_sentiment")
-        .select("*")
-        .eq("district_id", districtId)
-        .eq("kind", kind)
-        .eq("item_id", itemId)
-        .maybeSingle(),
-      supabase
-        .from("insights_item_party")
-        .select("*")
-        .eq("district_id", districtId)
-        .eq("kind", kind)
-        .eq("item_id", itemId),
-      supabase
-        .from("insights_item_trend")
-        .select("*")
-        .eq("district_id", districtId)
-        .eq("kind", kind)
-        .eq("item_id", itemId)
-        .order("day", { ascending: true })
-        .limit(2000),
-    ]);
+  const [
+    catalog,
+    { data: stats },
+    { data: party },
+    { data: trend },
+    { data: ageYears },
+    { data: exactDistricts },
+  ] = await Promise.all([
+    getCatalog(),
+    supabase
+      .from("insights_item_sentiment")
+      .select("*")
+      .eq("district_id", districtId)
+      .eq("kind", kind)
+      .eq("item_id", itemId)
+      .maybeSingle(),
+    supabase
+      .from("insights_item_party")
+      .select("*")
+      .eq("district_id", districtId)
+      .eq("kind", kind)
+      .eq("item_id", itemId),
+    supabase
+      .from("insights_item_trend")
+      .select("*")
+      .eq("district_id", districtId)
+      .eq("kind", kind)
+      .eq("item_id", itemId)
+      .order("day", { ascending: true })
+      .limit(2000),
+    supabase
+      .from("insights_item_age_year")
+      .select("*")
+      .eq("district_id", districtId)
+      .eq("kind", kind)
+      .eq("item_id", itemId)
+      .order("age_years", { ascending: true }),
+    supabase
+      .from("insights_item_district_exact")
+      .select("*")
+      .eq("root_district", districtId)
+      .eq("kind", kind)
+      .eq("item_id", itemId)
+      .order("n", { ascending: false }),
+  ]);
 
   let item = catalog.find((c) => c.kind === kind && c.id === itemId) ?? null;
   if (!item && stats) {
@@ -263,6 +293,18 @@ export async function getItemDetail(
       a.party.localeCompare(b.party)
     ),
     trend: (trend ?? []) as ItemTrendPoint[],
+    ageYears: (ageYears ?? []) as {
+      age_years: number;
+      n: number;
+      avg_value: number | null;
+      low_sample: boolean;
+    }[],
+    exactDistricts: (exactDistricts ?? []) as {
+      district_id: string;
+      n: number;
+      avg_value: number | null;
+      low_sample: boolean;
+    }[],
   };
 }
 

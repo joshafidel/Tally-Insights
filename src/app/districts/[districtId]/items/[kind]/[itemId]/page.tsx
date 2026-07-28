@@ -164,6 +164,95 @@ export default async function ItemDetailPage({
           )}
         </section>
       </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section className="rounded-xl border border-brand-300 bg-gradient-to-b from-card to-brand-50/60 p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
+              By exact age (year)
+            </h2>
+            <span className="rounded-full bg-brand-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+              Premium
+            </span>
+          </div>
+          {!ctx.features.includes("age_exact") ? (
+            <p className="text-sm text-muted">
+              Exact age breakdowns are available on a higher tier. Contact your
+              Tally account representative to enable them.
+            </p>
+          ) : detail.ageYears.length > 0 ? (
+            <table className="w-full max-w-sm text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="py-2 pr-3 font-medium">Age</th>
+                  <th className="py-2 pr-3 text-right font-medium">Mean</th>
+                  <th className="py-2 text-right font-medium">Responses</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.ageYears.map((r) => (
+                  <tr key={r.age_years} className="border-b border-border last:border-0">
+                    <td className="py-2 pr-3 tabular-nums">{r.age_years}</td>
+                    <td className="py-2 pr-3 text-right font-medium tabular-nums text-brand-800">
+                      {r.avg_value?.toFixed(2)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">n={r.n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-sm text-muted">
+              Enabled for your org. Birth years arrive as verified users
+              complete ID verification in the Tally app; rows appear here
+              automatically.
+            </p>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-brand-300 bg-gradient-to-b from-card to-brand-50/60 p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
+              By exact district
+            </h2>
+            <span className="rounded-full bg-brand-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+              Premium
+            </span>
+          </div>
+          {!ctx.features.includes("district_exact") ? (
+            <p className="text-sm text-muted">
+              Sub district breakdowns are available on a higher tier. Contact
+              your Tally account representative to enable them.
+            </p>
+          ) : detail.exactDistricts.length > 0 ? (
+            <table className="w-full max-w-sm text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="py-2 pr-3 font-medium">District</th>
+                  <th className="py-2 pr-3 text-right font-medium">Mean</th>
+                  <th className="py-2 text-right font-medium">Responses</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.exactDistricts.map((r) => (
+                  <tr key={r.district_id} className="border-b border-border last:border-0">
+                    <td className="py-2 pr-3">{r.district_id}</td>
+                    <td className="py-2 pr-3 text-right font-medium tabular-nums text-brand-800">
+                      {r.avg_value?.toFixed(2)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">n={r.n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-sm text-muted">
+              Enabled for your org. No sub district responses for this item
+              yet.
+            </p>
+          )}
+        </section>
+      </div>
     </AppShell>
   );
 }

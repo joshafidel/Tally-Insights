@@ -13,6 +13,7 @@ export type OrgContext = {
   user: User;
   membership: Membership | null;
   entitledDistricts: { id: string; name: string; state: string; type: string }[];
+  features: string[];
 };
 
 /*
@@ -33,7 +34,8 @@ export async function getOrgContext(): Promise<OrgContext | null> {
     .eq("user_id", user.id);
 
   const first = memberRows?.[0];
-  if (!first) return { user, membership: null, entitledDistricts: [] };
+  if (!first)
+    return { user, membership: null, entitledDistricts: [], features: [] };
 
   const orgs = first.organizations as unknown as { name: string } | null;
   const membership: Membership = {
@@ -42,14 +44,22 @@ export async function getOrgContext(): Promise<OrgContext | null> {
     role: first.role as OrgRole,
   };
 
-  const { data: entitlementRows } = await supabase
-    .from("org_entitlements")
-    .select("district_id, districts(id, name, state, type)")
-    .eq("org_id", membership.orgId);
+  const [{ data: entitlementRows }, { data: featureRows }] = await Promise.all([
+    supabase
+      .from("org_entitlements")
+      .select("district_id, districts(id, name, state, type)")
+      .eq("org_id", membership.orgId),
+    supabase.from("org_features").select("feature").eq("org_id", membership.orgId),
+  ]);
 
   const entitledDistricts = (entitlementRows ?? [])
     .map((r) => r.districts as unknown as OrgContext["entitledDistricts"][number])
     .filter(Boolean);
 
-  return { user, membership, entitledDistricts };
+  return {
+    user,
+    membership,
+    entitledDistricts,
+    features: (featureRows ?? []).map((f) => f.feature),
+  };
 }
