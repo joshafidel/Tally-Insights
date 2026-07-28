@@ -18,6 +18,12 @@ export const metadata: Metadata = {
     "District sentiment intelligence for legislative and government affairs teams.",
 };
 
+export const viewport = {
+  themeColor: "#5c3792",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

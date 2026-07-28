@@ -19,7 +19,7 @@ export function PartyFilter({
   current: string;
 }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-white p-1 shadow-sm">
+    <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-border bg-white p-1 shadow-sm">
       {OPTIONS.map((o) => {
         const active = current === o.key;
         return (

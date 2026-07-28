@@ -96,7 +96,9 @@ export default async function DashboardPage() {
           {
             label: "Alerts (unacknowledged)",
             value: unacked,
-            sub: `${(rules ?? []).filter((r) => r.active).length} active rules`,
+            sub: `${(rules ?? []).filter((r) => r.active).length} active ${
+              (rules ?? []).filter((r) => r.active).length === 1 ? "rule" : "rules"
+            }`,
           },
         ].map((t) => (
           <div

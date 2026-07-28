@@ -99,8 +99,38 @@ export function AppShell({
             )}
           </div>
         </div>
+        {/* Mobile nav: same destinations as the desktop bar, scrollable pills */}
+        <nav className="flex items-center gap-2 overflow-x-auto px-4 pb-3 md:hidden">
+          {NAV.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href(districtId)}
+              className={
+                active === item.label
+                  ? "shrink-0 whitespace-nowrap rounded-full bg-brand-600 px-3 py-1.5 text-xs font-medium text-white"
+                  : "shrink-0 whitespace-nowrap rounded-full border border-border bg-white px-3 py-1.5 text-xs text-muted"
+              }
+            >
+              {item.label}
+            </Link>
+          ))}
+          {ctx.entitledDistricts.length > 1 &&
+            ctx.entitledDistricts.map((d) => (
+              <Link
+                key={d.id}
+                href={`/districts/${d.id}`}
+                className={
+                  d.id === districtId
+                    ? "shrink-0 whitespace-nowrap rounded-full bg-brand-100 px-3 py-1.5 text-xs font-medium text-brand-800"
+                    : "shrink-0 whitespace-nowrap rounded-full border border-dashed border-brand-300 bg-white px-3 py-1.5 text-xs text-muted"
+                }
+              >
+                {d.name}
+              </Link>
+            ))}
+        </nav>
       </header>
-      <main className="mx-auto w-full max-w-[1400px] px-6 py-6">{children}</main>
+      <main className="mx-auto w-full max-w-[1400px] px-4 py-5 md:px-6 md:py-6">{children}</main>
     </div>
   );
 }

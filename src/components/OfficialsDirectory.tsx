@@ -176,7 +176,7 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search all officials by name, office, or state..."
-            className="w-72 rounded-lg border border-border bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200 sm:w-72"
           />
           <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-white p-1">
             {LEVEL_TABS.map((t) => (
@@ -225,8 +225,8 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-          <div className="max-h-[720px] overflow-y-auto">
-            <table className="w-full text-sm">
+          <div className="max-h-[720px] overflow-y-auto overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
               <thead className="sticky top-0 bg-brand-50">
                 <tr className="text-left text-xs uppercase tracking-wide text-muted">
                   <th className="px-4 py-2.5 font-medium">Official</th>
