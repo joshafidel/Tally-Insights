@@ -171,12 +171,12 @@ export function FilterSidebar({
     focusOn(NYC_BOUNDS, 0.15, 1);
     apply({ d: id, exact: "1" });
   };
-  const pickCounty = (st: string, d: string) => {
+  const pickCounty = (st: string, county: { name: string; d: string }) => {
     setQuery("");
     setZoomState(st);
-    focusOn(pathBounds(d), 0.5, 2);
-    const root = rootOfState(st);
-    if (root) apply({ d: root, exact: null });
+    focusOn(pathBounds(county.d), 0.5, 2);
+    const slug = county.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    apply({ d: `${st.toLowerCase()}-co-${slug}`, exact: "1" });
   };
 
   const results: SearchResult[] = useMemo(() => {
@@ -217,7 +217,7 @@ export function FilterSidebar({
               key: `${st}-${c.name}`,
               label: `${c.name} County`,
               sub: st,
-              run: () => pickCounty(st, c.d),
+              run: () => pickCounty(st, c),
             });
           }
         }
@@ -241,6 +241,14 @@ export function FilterSidebar({
       .filter((d) => d.state === zoomState)
       .sort((a, b) => b.n - a.n);
   }, [districts, zoomState]);
+
+  const countyCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const d of districts) {
+      if (d.district_id.includes("-co-")) m[d.district_id] = d.n;
+    }
+    return m;
+  }, [districts]);
 
   const activeCount =
     (f.district ? 1 : 0) + f.party.length + f.age.length + f.sex.length + f.race.length;
@@ -292,27 +300,6 @@ export function FilterSidebar({
       </div>
 
       <Section title="Region">
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          <Chip
-            active={!f.district}
-            onClick={() => {
-              setZoomState(null);
-              apply({ d: null, exact: null });
-            }}
-          >
-            All entitled
-          </Chip>
-          {districts.some((d) => d.district_id === "us") && (
-            <Chip active={f.district === "us"} onClick={pickUS}>
-              United States
-            </Chip>
-          )}
-          {districts.some((d) => d.district_id === "nyc") && (
-            <Chip active={f.district === "nyc" && !f.exact} onClick={pickNYC}>
-              New York City
-            </Chip>
-          )}
-        </div>
         <div className="relative mb-2">
           <input
             type="search"
@@ -351,6 +338,7 @@ export function FilterSidebar({
           councilDistricts={districts
             .filter((d) => d.district_id.includes("-cc-"))
             .map((d) => ({ id: d.district_id, label: d.district_id, n: d.n }))}
+          countyCounts={countyCounts}
           selectedDistrict={f.exact ? f.district : null}
           onSelectDistrict={(id) =>
             id ? apply({ d: id, exact: "1" }) : apply({ d: null, exact: null })
@@ -369,7 +357,7 @@ export function FilterSidebar({
               </div>
             )}
             <div className="flex flex-wrap gap-1.5">
-              {stateDistricts.map((d) => {
+              {stateDistricts.slice(0, 12).map((d) => {
                 const exact = d.district_id !== d.root_district;
                 return (
                   <Chip
@@ -386,6 +374,12 @@ export function FilterSidebar({
                   </Chip>
                 );
               })}
+              {stateDistricts.length > 12 && (
+                <span className="self-center text-xs text-muted">
+                  and {stateDistricts.length - 12} more: double click the map or
+                  search above
+                </span>
+              )}
               {stateDistricts.length === 0 && (
                 <span className="text-xs text-muted">No responses in this state yet.</span>
               )}

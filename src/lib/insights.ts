@@ -428,12 +428,19 @@ export type AvailableDistrictRow = {
 export const getAvailableDistricts = cache(
   async (): Promise<AvailableDistrictRow[]> => {
     const supabase = await createClient();
-    const [{ data: avail }, { data: districts }] = await Promise.all([
-      supabase.from("insights_available_districts").select("*"),
+    // County granularity pushed the underlying view past PostgREST's 1000
+    // row page size; the rpc returns the full set as one JSON payload.
+    const [{ data: allJson }, { data: districts }] = await Promise.all([
+      supabase.rpc("insights_available_districts_all"),
       supabase.from("districts").select("id, state"),
     ]);
+    const rows = (allJson ?? []) as {
+      district_id: string;
+      root_district: string;
+      n: number;
+    }[];
     const stateOf = new Map((districts ?? []).map((d) => [d.id, d.state]));
-    return (avail ?? []).map((a) => ({
+    return rows.map((a) => ({
       district_id: a.district_id,
       root_district: a.root_district,
       n: a.n,

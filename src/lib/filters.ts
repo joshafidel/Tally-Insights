@@ -60,6 +60,14 @@ export function districtLabel(id: string): string {
   if (id === "nyc") return "New York City";
   if (id === "us") return "United States";
   if (id.includes("-cc-")) return `Council District ${id.split("-cc-")[1]}`;
+  const county = id.match(/^([a-z]{2})-co-(.+)$/);
+  if (county) {
+    const name = county[2]
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+    return `${name} County, ${county[1].toUpperCase()}`;
+  }
   return STATE_NAME[id] ?? id;
 }
 

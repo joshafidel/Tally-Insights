@@ -403,17 +403,14 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* Data quality: the front page carries its own methodology summary */}
+      {/* Data quality summary */}
       <section className="mt-4 rounded-2xl border border-border bg-brand-50/60 px-5 py-3 text-xs text-muted">
         <span className="font-semibold text-brand-800">About this data:</span>{" "}
         {days.length > 0 ? `responses from ${fmtD(days[0])} to ${fmtD(days[days.length - 1])}` : "no responses yet"}
-        {" · updated continuously · coverage: New York City at council district level, all 50 states, national"}
+        {" · updated continuously · coverage: New York City at council district level, all 50 states at county level, national"}
         {" · unweighted means of ID verified constituents · top line floor n=50, demographic floor n=5"}
         {" · self selected respondents, not a probability sample"}
-        {simulated ? " · SIMULATED DATASET for demonstration" : ""}{" "}
-        <Link href={`/methodology?district=${primary.id}`} className="text-brand-700 hover:underline">
-          Full methodology →
-        </Link>
+        {simulated ? " · SIMULATED DATASET for demonstration" : ""}
       </section>
     </AppShell>
   );

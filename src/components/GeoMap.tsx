@@ -18,9 +18,13 @@ import { US_STATES } from "@/lib/usStatesGeo";
 
 const FULL: [number, number, number, number] = [0, 0, 975, 610];
 const SMALL_STATES = new Set(["CT", "RI", "DE", "NJ", "MD", "MA", "NH", "VT", "DC"]);
-const COUNTY_VB = 260; // show counties when viewBox width is below this
+const COUNTY_VB = 520; // show counties once a state fills the view
 const OUTLINE_VB = 170; // sub district boundaries become visible below this
 const DISTRICT_VB = 45; // sub districts become interactive below this
+
+function countySlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
 
 type CountyShape = { name: string; d: string };
 type CouncilShape = { num: number; d: string; centroid: number[] };
@@ -38,6 +42,7 @@ export function GeoMap({
   selectedState,
   onSelectState,
   councilDistricts,
+  countyCounts,
   selectedDistrict,
   onSelectDistrict,
   focus,
@@ -48,6 +53,7 @@ export function GeoMap({
   selectedState: string | null;
   onSelectState: (s: string | null) => void;
   councilDistricts?: GeoDistrictOption[];
+  countyCounts?: Record<string, number>;
   selectedDistrict?: string | null;
   onSelectDistrict?: (id: string | null) => void;
   focus?: GeoFocus | null;
@@ -97,7 +103,11 @@ export function GeoMap({
     }
   }, [zoomedState, counties]);
   useEffect(() => {
-    if ((vb[2] < OUTLINE_VB * 2 || selectedDistrict) && !council && hasCouncil) {
+    if (
+      (vb[2] < OUTLINE_VB * 2 || selectedDistrict?.startsWith("nyc-cc-")) &&
+      !council &&
+      hasCouncil
+    ) {
       fetch("/nyc-council.json").then((r) => r.json()).then(setCouncil).catch(() => {});
     }
   }, [vb, council, hasCouncil, selectedDistrict]);
@@ -167,7 +177,19 @@ export function GeoMap({
       autoDistrict.current = null;
       return;
     }
-    if (!council || autoDistrict.current === selectedDistrict) return;
+    if (autoDistrict.current === selectedDistrict) return;
+    // A selected county zooms the map to its state so the county layer shows.
+    if (selectedDistrict.includes("-co-")) {
+      autoDistrict.current = selectedDistrict;
+      if (vbRef.current[2] >= COUNTY_VB) {
+        const st = US_STATES.find(
+          (s) => s.abbr === selectedDistrict.slice(0, 2).toUpperCase()
+        );
+        if (st) zoomTo(st.bounds);
+      }
+      return;
+    }
+    if (!council) return;
     autoDistrict.current = selectedDistrict;
     if (vbRef.current[2] >= DISTRICT_VB) {
       const xs = council.map((c) => c.centroid[0]);
@@ -212,7 +234,7 @@ export function GeoMap({
     return smalls.map((s, i) => ({
       abbr: s.abbr,
       from: s.centroid,
-      to: [902, 104 + i * 44] as [number, number],
+      to: [918, 150 + i * 44] as [number, number],
     }));
   }, []);
 
@@ -248,7 +270,11 @@ export function GeoMap({
         )}
         <span className="ml-auto text-muted">
           scroll to zoom, drag to pan
-          {showDistricts ? ", double click a district to select it" : ""}
+          {showDistricts
+            ? ", double click a district to select it"
+            : zoomedState
+              ? ", double click a county to select it"
+              : ""}
         </span>
       </div>
 
@@ -263,20 +289,6 @@ export function GeoMap({
         role="img"
         aria-label="United States map"
       >
-        {zoomedState &&
-          counties?.[zoomedState]?.map((c, i) => (
-            <path
-              key={i}
-              d={c.d}
-              fill="none"
-              stroke="var(--brand-300)"
-              strokeWidth={0.7}
-              vectorEffect="non-scaling-stroke"
-            >
-              <title>{`${c.name} County`}</title>
-            </path>
-          ))}
-
         {US_STATES.map((s) => (
           <path
             key={s.abbr}
@@ -293,6 +305,56 @@ export function GeoMap({
             <title>{`${s.name}: ${(counts[s.abbr] ?? 0).toLocaleString("en-US")} ${legend}`}</title>
           </path>
         ))}
+
+        {/* Counties surface on top of the focused state, shaded by response
+            volume; double click selects one as the audience filter */}
+        {zoomedState && !showDistricts &&
+          (() => {
+            const list = counties?.[zoomedState] ?? [];
+            const stLower = zoomedState.toLowerCase();
+            const ns = list.map(
+              (c) => countyCounts?.[`${stLower}-co-${countySlug(c.name)}`] ?? 0
+            );
+            const cMax = Math.max(1, ...ns);
+            return list.map((c, i) => {
+              const id = `${stLower}-co-${countySlug(c.name)}`;
+              const n = ns[i];
+              const isSel = selectedDistrict === id;
+              // Log scale: one giant county must not wash out all the others
+              const t = n === 0 ? 0 : Math.log(1 + n) / Math.log(1 + cMax);
+              return (
+                <path
+                  key={id}
+                  d={c.d}
+                  fill={
+                    isSel
+                      ? "var(--brand-800)"
+                      : n === 0
+                        ? "white"
+                        : t > 0.6
+                          ? "var(--brand-600)"
+                          : t > 0.25
+                            ? "var(--brand-400)"
+                            : "var(--brand-200)"
+                  }
+                  fillOpacity={isSel ? 0.95 : 0.75}
+                  stroke={isSel ? "var(--brand-900)" : "#5b5470"}
+                  strokeWidth={isSel ? 2.5 : 1}
+                  vectorEffect="non-scaling-stroke"
+                  className="cursor-pointer hover:opacity-80"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    onSelectDistrict?.(isSel ? null : id);
+                  }}
+                >
+                  <title>{`${c.name} County: ${n.toLocaleString("en-US")} ${legend} (double click to select)`}</title>
+                </path>
+              );
+            });
+          })()}
 
         {/* Sub district boundaries fade in while zooming toward the city
             and become double clickable at close zoom: one continuous map */}
@@ -352,26 +414,33 @@ export function GeoMap({
             </text>
           ))}
 
-        {/* State abbreviations: halo + continuous rescale */}
+        {/* State abbreviations: halo + continuous rescale. Small states use
+            leader lines at national zoom; once zoomed in, their labels render
+            in place at a reduced size so they never disappear */}
         {!showDistricts &&
-          US_STATES.filter((s) => !SMALL_STATES.has(s.abbr)).map((s) => (
-            <text
-              key={s.abbr}
-              x={s.centroid[0]}
-              y={s.centroid[1]}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              className="pointer-events-none select-none"
-              fontSize={stateLabel}
-              fontWeight={700}
-              fill="var(--brand-900)"
-              stroke="white"
-              strokeWidth={stateLabel / 5.5}
-              paintOrder="stroke"
-            >
-              {s.abbr}
-            </text>
-          ))}
+          US_STATES.filter(
+            (s) => !SMALL_STATES.has(s.abbr) || vb[2] <= 600
+          ).map((s) => {
+            const size = SMALL_STATES.has(s.abbr) ? stateLabel * 0.55 : stateLabel;
+            return (
+              <text
+                key={s.abbr}
+                x={s.centroid[0]}
+                y={s.centroid[1]}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="pointer-events-none select-none"
+                fontSize={size}
+                fontWeight={700}
+                fill="var(--brand-900)"
+                stroke="white"
+                strokeWidth={size / 5.5}
+                paintOrder="stroke"
+              >
+                {s.abbr}
+              </text>
+            );
+          })}
         {vb[2] > 600 &&
           smallLabels.map((l) => (
             <g key={l.abbr} className="cursor-pointer" onClick={() => clickState(l.abbr)}>

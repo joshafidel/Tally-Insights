@@ -8,7 +8,6 @@ const NAV = [
   { label: "Bills", href: (d: string) => `/districts/${d}/bills` },
   { label: "Officials", href: (d: string) => `/districts/${d}/officials` },
   { label: "Watchlist and alerts", href: (d: string) => `/districts/${d}/watchlist` },
-  { label: "Methodology", href: (d: string) => `/methodology?district=${d}` },
 ];
 
 export function AppShell({
