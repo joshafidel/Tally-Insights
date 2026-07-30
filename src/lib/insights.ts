@@ -1,4 +1,6 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import type { AudienceFilters } from "@/lib/filters";
 
 export type ItemKind = "topic" | "bill" | "live_bill";
 
@@ -37,6 +39,7 @@ export type PartyRow = {
   n: number;
   avg_value: number | null;
   low_sample: boolean;
+  distribution?: number[] | null;
 };
 
 export type AlignmentRow = {
@@ -69,7 +72,7 @@ export const KIND_LABEL: Record<ItemKind, string> = {
   bill, plus any item real users rated that is not in a content table (the
   consumer app stores those titles on the weigh in row).
 */
-export async function getCatalog(): Promise<CatalogItem[]> {
+export const getCatalog = cache(async (): Promise<CatalogItem[]> => {
   const supabase = await createClient();
   // List fields only: summaries are large and fetched by the detail page.
   const [{ data: topics }, { data: bills }, { data: liveBills }] =
@@ -120,7 +123,7 @@ export async function getCatalog(): Promise<CatalogItem[]> {
     });
   }
   return items;
-}
+});
 
 export type OverviewItem = CatalogItem & {
   stats: ItemStats | null;
@@ -381,6 +384,7 @@ export type DemographicRow = {
   n: number;
   avg_value: number | null;
   low_sample: boolean;
+  distribution?: number[] | null;
 };
 
 export async function getAlignment(districtIds: string[]) {
@@ -412,4 +416,114 @@ export async function logAccess(
       detail: detail ?? null,
     })
     .then(() => undefined);
+}
+
+export type AvailableDistrictRow = {
+  district_id: string;
+  root_district: string;
+  n: number;
+  state: string;
+};
+
+export const getAvailableDistricts = cache(
+  async (): Promise<AvailableDistrictRow[]> => {
+    const supabase = await createClient();
+    const [{ data: avail }, { data: districts }] = await Promise.all([
+      supabase.from("insights_available_districts").select("*"),
+      supabase.from("districts").select("id, state"),
+    ]);
+    const stateOf = new Map((districts ?? []).map((d) => [d.id, d.state]));
+    return (avail ?? []).map((a) => ({
+      district_id: a.district_id,
+      root_district: a.root_district,
+      n: a.n,
+      state: stateOf.get(a.root_district) ?? "US",
+    }));
+  }
+);
+
+/*
+  Sidebar driven overview: item aggregates under any combination of district
+  (root or exact), party, age bracket, sex, and race. The database function
+  enforces entitlement and premium gating.
+*/
+export async function getFilteredOverview(
+  orgId: string,
+  defaultDistrict: string,
+  f: AudienceFilters
+) {
+  const supabase = await createClient();
+  const [catalog, { data: stats }, { data: tracked }] = await Promise.all([
+    getCatalog(),
+    supabase.rpc("insights_filtered_item_stats", {
+      p_district: f.district ?? defaultDistrict,
+      p_exact: f.exact,
+      p_party: f.party.length ? f.party : null,
+      p_age: f.age.length ? f.age : null,
+      p_sex: f.sex.length ? f.sex : null,
+      p_race: f.race.length ? f.race : null,
+    }),
+    supabase
+      .from("tracked_items")
+      .select("kind, item_id")
+      .eq("org_id", orgId),
+  ]);
+
+  type Row = {
+    kind: string;
+    item_id: string;
+    n: number;
+    avg_value: number | null;
+    distribution: number[] | null;
+    avg_7d_ago: number | null;
+    avg_30d_ago: number | null;
+    title: string | null;
+  };
+  const rows = (stats ?? []) as Row[];
+  const catalogKeys = new Set(catalog.map((c) => `${c.kind}:${c.id}`));
+  for (const s of rows) {
+    const key = `${s.kind}:${s.item_id}`;
+    if (!catalogKeys.has(key)) {
+      catalogKeys.add(key);
+      catalog.push({
+        kind: s.kind as ItemKind,
+        id: s.item_id,
+        title: s.title ?? s.item_id,
+        subtitle: "Rated in the Tally app",
+        status: null,
+        summary: null,
+        category: null,
+        createdAt: null,
+      });
+    }
+  }
+  const delta = (now: number | null, past: number | null) =>
+    now != null && past != null ? Math.round((now - past) * 100) / 100 : null;
+  const statsMap = new Map(rows.map((r) => [`${r.kind}:${r.item_id}`, r]));
+  const trackedSet = new Set((tracked ?? []).map((t) => `${t.kind}:${t.item_id}`));
+
+  const items: OverviewItem[] = catalog.map((c) => {
+    const key = `${c.kind}:${c.id}`;
+    const s = statsMap.get(key);
+    return {
+      ...c,
+      stats: s
+        ? {
+            kind: s.kind,
+            item_id: s.item_id,
+            district_id: f.district ?? defaultDistrict,
+            n: s.n,
+            avg_value: s.avg_value,
+            distribution: s.distribution,
+            low_sample: s.n < 50,
+          }
+        : null,
+      change7: s ? delta(s.avg_value, s.avg_7d_ago) : null,
+      change30: s ? delta(s.avg_value, s.avg_30d_ago) : null,
+      tracked: trackedSet.has(key),
+    };
+  });
+
+  items.sort((a, b) => (b.stats?.n ?? 0) - (a.stats?.n ?? 0) || a.title.localeCompare(b.title));
+  return items;
 }

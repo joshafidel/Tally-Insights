@@ -36,8 +36,7 @@ export async function addTrackedItem(formData: FormData) {
     resource: "tracked_items",
     detail: { kind, item_id: itemId, district_id: districtId },
   });
-  revalidatePath(`/districts/${districtId}/watchlist`);
-  revalidatePath(`/districts/${districtId}`);
+  revalidatePath(`/districts/${districtId}`, "layout");
 }
 
 export async function removeTrackedItem(formData: FormData) {
@@ -50,8 +49,7 @@ export async function removeTrackedItem(formData: FormData) {
     .eq("kind", String(formData.get("kind")))
     .eq("item_id", String(formData.get("item_id")))
     .eq("district_id", districtId);
-  revalidatePath(`/districts/${districtId}/watchlist`);
-  revalidatePath(`/districts/${districtId}`);
+  revalidatePath(`/districts/${districtId}`, "layout");
 }
 
 export async function createAlertRule(formData: FormData) {

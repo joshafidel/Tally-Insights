@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { UsTileMap } from "@/components/UsTileMap";
+import { UsGeoMap } from "@/components/UsGeoMap";
 import {
   Scorecard,
   type OfficialSummary,
@@ -116,7 +116,7 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
             Find officials on the map
           </h2>
-          <UsTileMap counts={mapCounts} selected={state} onSelect={setState} />
+          <UsGeoMap counts={mapCounts} selected={state} onSelect={setState} />
         </div>
         {selected && (
           <div className="mt-6">
@@ -194,16 +194,29 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
               </button>
             ))}
           </div>
-          <select
-            value={party}
-            onChange={(e) => setParty(e.target.value)}
-            className="rounded-lg border border-border bg-white px-2 py-1.5 text-sm"
-          >
-            <option value="all">All parties</option>
-            <option value="D">Democrats</option>
-            <option value="R">Republicans</option>
-            <option value="I">Independents</option>
-          </select>
+          <div className="inline-flex items-center overflow-hidden rounded-lg border border-border bg-white">
+            {[
+              { key: "all", label: "All parties", color: "var(--brand-600)" },
+              { key: "D", label: "Dem", color: "var(--party-d)" },
+              { key: "R", label: "Rep", color: "var(--party-r)" },
+              { key: "I", label: "Ind", color: "var(--party-i)" },
+            ].map((o, i) => (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => setParty(o.key)}
+                className={
+                  (i > 0 ? "border-l border-border " : "") +
+                  (party === o.key
+                    ? "px-3 py-1.5 text-xs font-medium text-white"
+                    : "px-3 py-1.5 text-xs text-muted hover:bg-brand-50")
+                }
+                style={party === o.key ? { backgroundColor: o.color } : undefined}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
           <label className="flex items-center gap-1 text-xs text-muted">
             Sort by
             <select

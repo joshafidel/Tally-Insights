@@ -16,6 +16,13 @@ export default async function DashboardPage() {
   const orgId = ctx.membership.orgId;
   const supabase = await createClient();
 
+  const [
+    { data: partyEngagement },
+    { data: registrations },
+  ] = await Promise.all([
+    supabase.from("insights_party_engagement").select("*"),
+    supabase.from("insights_registrations").select("*").order("month"),
+  ]);
   const [overviews, { data: trendAll }, { data: rules }, { data: events }] =
     await Promise.all([
       Promise.all(
@@ -67,6 +74,31 @@ export default async function DashboardPage() {
   const recentRated = withData.slice(0, 8);
   const unacked = (events ?? []).filter((e) => !e.acknowledged_at).length;
 
+  const engagement = (partyEngagement ?? []) as {
+    party: string;
+    constituents: number;
+    engaged_this_month: number;
+    engaged_last_month: number;
+    new_this_month: number;
+  }[];
+  const verifiedTotal = engagement.reduce((a, r) => a + r.constituents, 0);
+  const newThisMonth = engagement.reduce((a, r) => a + r.new_this_month, 0);
+  const partyTile = (party: string, label: string, color: string) => {
+    const r = engagement.find((e) => e.party === party);
+    if (!r || r.constituents === 0) return { label, color, pct: null, delta: 0, n: 0 };
+    const pct = Math.round((r.engaged_this_month / r.constituents) * 100);
+    const prev = Math.round((r.engaged_last_month / r.constituents) * 100);
+    return { label, color, pct, delta: pct - prev, n: r.constituents };
+  };
+  const partyTiles = [
+    partyTile("D", "of Democrats weighed in this month", "var(--party-d)"),
+    partyTile("R", "of Republicans weighed in this month", "var(--party-r)"),
+    partyTile("I", "of Independents weighed in this month", "var(--party-i)"),
+  ];
+  const regPoints = ((registrations ?? []) as { month: string; registrations: number }[]).map(
+    (r) => ({ day: r.month, responses: r.registrations })
+  );
+
   return (
     <AppShell ctx={ctx} districtId={primary.id} active="Dashboard">
       <div className="mb-6">
@@ -80,6 +112,34 @@ export default async function DashboardPage() {
             : `${ctx.entitledDistricts.length} districts`}
           : {ctx.entitledDistricts.map((d) => d.name).join(", ")}.
         </p>
+      </div>
+
+      {/* District pulse: mirrors the consumer app header a politician knows */}
+      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-brand-200 bg-card px-5 py-4 shadow-sm">
+          <div className="text-3xl font-semibold tabular-nums text-brand-700">
+            {verifiedTotal.toLocaleString("en-US")}
+          </div>
+          <div className="text-xs text-muted">
+            verified constituents
+            {newThisMonth > 0 ? ` (+${newThisMonth.toLocaleString("en-US")} new this month)` : ""}
+          </div>
+        </div>
+        {partyTiles.map((t) => (
+          <div key={t.label} className="rounded-2xl border border-brand-200 bg-card px-5 py-4 shadow-sm">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-semibold tabular-nums" style={{ color: t.color }}>
+                {t.pct != null ? `${t.pct}%` : "n/a"}
+              </span>
+              {t.pct != null && t.delta !== 0 && (
+                <span className="text-xs text-muted">
+                  {t.delta > 0 ? "▲" : "▼"} {Math.abs(t.delta)}
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-muted">{t.label}</div>
+          </div>
+        ))}
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -127,6 +187,16 @@ export default async function DashboardPage() {
           ) : (
             <p className="text-sm text-muted">No responses yet.</p>
           )}
+          <div className="mt-4 border-t border-border pt-3">
+            <h3 className="mb-1 text-sm font-medium uppercase tracking-wide text-muted">
+              New verified registrations by month
+            </h3>
+            {regPoints.length > 0 ? (
+              <VolumeChart points={regPoints} />
+            ) : (
+              <p className="text-sm text-muted">No registrations recorded yet.</p>
+            )}
+          </div>
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">

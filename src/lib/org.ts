@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { User } from "@supabase/supabase-js";
 
@@ -21,11 +22,15 @@ export type OrgContext = {
   All reads go through RLS: a user with no seat gets an empty context,
   which the UI renders as the "no access" screen.
 */
-export async function getOrgContext(): Promise<OrgContext | null> {
+export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
   const supabase = await createClient();
+  // Middleware already validated the token against the auth server on this
+  // request; reading the session from the cookie here avoids a second
+  // network round trip per page.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return null;
 
   const { data: memberRows } = await supabase
@@ -62,4 +67,4 @@ export async function getOrgContext(): Promise<OrgContext | null> {
     entitledDistricts,
     features: (featureRows ?? []).map((f) => f.feature),
   };
-}
+});

@@ -6,6 +6,8 @@ import { DistBar } from "@/components/DistBar";
 
 export type TopicRow = {
   id: string;
+  kind: string;
+  status: string | null;
   title: string;
   category: string | null;
   createdAt: string | null;
@@ -44,9 +46,15 @@ function fmtDate(iso: string | null) {
 export function TopicsTable({
   rows,
   districtId,
+  showAdded = true,
+  showStatus = false,
+  itemLabel = "Topic",
 }: {
   rows: TopicRow[];
   districtId: string;
+  showAdded?: boolean;
+  showStatus?: boolean;
+  itemLabel?: string;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("n");
   const [sortDesc, setSortDesc] = useState(true);
@@ -117,7 +125,7 @@ export function TopicsTable({
           <tr>
             <th className={th}>
               <button type="button" className={btn} onClick={() => sortBy("title", false)}>
-                Topic{indicator("title")}
+                {itemLabel}{indicator("title")}
               </button>
             </th>
             <th className={`${th} relative`}>
@@ -152,14 +160,15 @@ export function TopicsTable({
                           setCategories(next);
                         }}
                       />
-                      <span className="flex-1 capitalize">{c}</span>
+                      <span className="flex-1">{c}</span>
                       <span className="text-xs text-muted">{count}</span>
                     </label>
                   ))}
                 </div>
               )}
             </th>
-            <th className={`${th} relative`}>
+            {showStatus && <th className={th}>Status</th>}
+            {showAdded && <th className={`${th} relative`}>
               <button
                 type="button"
                 className={`${btn} rounded border px-1.5 py-0.5 ${datePreset !== "any" ? "border-brand-500 bg-brand-100 text-brand-800" : "border-transparent"}`}
@@ -193,7 +202,7 @@ export function TopicsTable({
                   </div>
                 </div>
               )}
-            </th>
+            </th>}
             <th className={`${th} text-right`}>
               <button type="button" className={btn} onClick={() => sortBy("mean")}>
                 Mean{indicator("mean")}
@@ -222,7 +231,7 @@ export function TopicsTable({
             <tr key={r.id} className="border-t border-border hover:bg-brand-50/50">
               <td className="max-w-[420px] px-4 py-2.5">
                 <Link
-                  href={`/districts/${districtId}/items/topic/${encodeURIComponent(r.id)}`}
+                  href={`/districts/${districtId}/items/${r.kind}/${encodeURIComponent(r.id)}`}
                   className="font-medium text-brand-800 hover:underline"
                 >
                   {r.title}
@@ -233,8 +242,9 @@ export function TopicsTable({
                   </span>
                 )}
               </td>
-              <td className="px-4 py-2.5 capitalize text-muted">{r.category ?? "other"}</td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-muted">{fmtDate(r.createdAt)}</td>
+              <td className="px-4 py-2.5 text-muted">{r.category ?? "Other"}</td>
+              {showStatus && <td className="px-4 py-2.5 capitalize text-muted">{(r.status ?? "").replaceAll("_", " ")}</td>}
+              {showAdded && <td className="whitespace-nowrap px-4 py-2.5 text-muted">{fmtDate(r.createdAt)}</td>}
               <td className="px-4 py-2.5 text-right">
                 {r.mean != null ? (
                   <span className="text-base font-semibold tabular-nums text-brand-800">
@@ -256,7 +266,7 @@ export function TopicsTable({
           ))}
           {filtered.length === 0 && (
             <tr>
-              <td colSpan={8} className="px-4 py-6 text-center text-sm text-muted">
+              <td colSpan={9} className="px-4 py-6 text-center text-sm text-muted">
                 No topics match the current filters.
               </td>
             </tr>
