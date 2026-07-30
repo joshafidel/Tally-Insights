@@ -71,15 +71,14 @@ export const KIND_LABEL: Record<ItemKind, string> = {
 */
 export async function getCatalog(): Promise<CatalogItem[]> {
   const supabase = await createClient();
+  // List fields only: summaries are large and fetched by the detail page.
   const [{ data: topics }, { data: bills }, { data: liveBills }] =
     await Promise.all([
-      supabase.from("topics").select("id, title, category, prompt, created_at"),
-      supabase
-        .from("bills")
-        .select("id, title, chamber, sponsor, status, plain_summary"),
+      supabase.from("topics").select("id, title, category, created_at"),
+      supabase.from("bills").select("id, title, chamber, sponsor, status"),
       supabase
         .from("live_bills")
-        .select("id, title, label, status, sponsor, policy_area, short_summary, gen_summary")
+        .select("id, title, label, status, sponsor, policy_area")
         .limit(1000),
     ]);
 
@@ -91,7 +90,7 @@ export async function getCatalog(): Promise<CatalogItem[]> {
       title: t.title,
       subtitle: `Topic · ${t.category}`,
       status: null,
-      summary: t.prompt,
+      summary: null,
       category: t.category,
       createdAt: t.created_at ?? null,
     });
@@ -103,7 +102,7 @@ export async function getCatalog(): Promise<CatalogItem[]> {
       title: b.title,
       subtitle: `${b.chamber} · ${b.sponsor}`,
       status: b.status,
-      summary: b.plain_summary,
+      summary: null,
       category: null,
       createdAt: null,
     });
@@ -115,7 +114,7 @@ export async function getCatalog(): Promise<CatalogItem[]> {
       title: lb.title,
       subtitle: `${lb.label ?? lb.id}${lb.sponsor ? ` · ${lb.sponsor}` : ""}${lb.policy_area ? ` · ${lb.policy_area}` : ""}`,
       status: lb.status,
-      summary: lb.gen_summary ?? lb.short_summary,
+      summary: null,
       category: lb.policy_area ?? null,
       createdAt: null,
     });
@@ -227,7 +226,6 @@ export async function getItemDetail(
 ) {
   const supabase = await createClient();
   const [
-    catalog,
     { data: stats },
     { data: party },
     { data: trend },
@@ -237,7 +235,6 @@ export async function getItemDetail(
     { data: sexRows },
     { data: raceRows },
   ] = await Promise.all([
-    getCatalog(),
     supabase
       .from("insights_item_sentiment")
       .select("*")
@@ -295,7 +292,46 @@ export async function getItemDetail(
       .order("n", { ascending: false }),
   ]);
 
-  let item = catalog.find((c) => c.kind === kind && c.id === itemId) ?? null;
+  // Fetch the one item's full record (including its summary) directly
+  // instead of loading the whole catalog with summaries.
+  let item: CatalogItem | null = null;
+  if (kind === "topic") {
+    const { data: t } = await supabase
+      .from("topics")
+      .select("id, title, category, prompt, created_at")
+      .eq("id", itemId)
+      .maybeSingle();
+    if (t)
+      item = {
+        kind, id: t.id, title: t.title, subtitle: `Topic · ${t.category}`,
+        status: null, summary: t.prompt, category: t.category,
+        createdAt: t.created_at ?? null,
+      };
+  } else if (kind === "bill") {
+    const { data: b } = await supabase
+      .from("bills")
+      .select("id, title, chamber, sponsor, status, plain_summary")
+      .eq("id", itemId)
+      .maybeSingle();
+    if (b)
+      item = {
+        kind, id: b.id, title: b.title, subtitle: `${b.chamber} · ${b.sponsor}`,
+        status: b.status, summary: b.plain_summary, category: null, createdAt: null,
+      };
+  } else {
+    const { data: lb } = await supabase
+      .from("live_bills")
+      .select("id, title, label, status, sponsor, policy_area, short_summary, gen_summary")
+      .eq("id", itemId)
+      .maybeSingle();
+    if (lb)
+      item = {
+        kind, id: lb.id, title: lb.title,
+        subtitle: `${lb.label ?? lb.id}${lb.sponsor ? ` · ${lb.sponsor}` : ""}${lb.policy_area ? ` · ${lb.policy_area}` : ""}`,
+        status: lb.status, summary: lb.gen_summary ?? lb.short_summary,
+        category: lb.policy_area ?? null, createdAt: null,
+      };
+  }
   if (!item && stats) {
     const s = stats as ItemStats & { title?: string | null };
     item = {
