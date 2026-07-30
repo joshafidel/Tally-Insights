@@ -135,7 +135,11 @@ export default async function ItemDetailPage({
     }));
 
   const tabsData: DistributionTabsData = {
-    all: { n: stats?.n ?? 0, distribution: stats?.distribution ?? null },
+    all: {
+      n: stats?.n ?? 0,
+      avg: stats?.avg_value ?? null,
+      distribution: stats?.distribution ?? null,
+    },
     party: partyGroups,
     age: ageGroups,
     sex: sexGroups,

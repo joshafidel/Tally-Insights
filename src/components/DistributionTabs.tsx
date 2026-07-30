@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Histogram } from "@/components/charts/Histogram";
 
 export type GroupDistribution = {
   key: string;
@@ -13,7 +12,7 @@ export type GroupDistribution = {
 };
 
 export type DistributionTabsData = {
-  all: { n: number; distribution: number[] | null };
+  all: { n: number; avg?: number | null; distribution: number[] | null };
   party: GroupDistribution[];
   age: GroupDistribution[];
   sex: GroupDistribution[];
@@ -96,22 +95,26 @@ export function DistributionTabs({ data }: { data: DistributionTabsData }) {
           </button>
         ))}
       </div>
-      {tab === "all" ? (
-        data.all.distribution ? (
-          <>
-            <Histogram distribution={data.all.distribution} />
-            <div className="mt-1 flex justify-between text-xs text-muted">
-              <span>1 = strongly disagree</span>
-              <span>n={data.all.n.toLocaleString("en-US")}</span>
-              <span>5 = strongly agree</span>
-            </div>
-          </>
+      {/* Every tab renders the same stacked bar rows, inside a fixed height
+          panel so switching filters never resizes the card */}
+      <div className="min-h-[248px]">
+        {tab === "all" ? (
+          <GroupRows
+            groups={[
+              {
+                key: "all",
+                label: "All voters",
+                color: "var(--brand-600)",
+                n: data.all.n,
+                avg: data.all.avg ?? null,
+                distribution: data.all.distribution,
+              },
+            ]}
+          />
         ) : (
-          <p className="text-sm text-muted">No responses yet.</p>
-        )
-      ) : (
-        <GroupRows groups={data[tab]} />
-      )}
+          <GroupRows groups={data[tab]} />
+        )}
+      </div>
     </div>
   );
 }

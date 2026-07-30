@@ -10,6 +10,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { DistBar } from "@/components/DistBar";
 import { createClient } from "@/lib/supabase/server";
+import { DOWN_COLOR, UP_COLOR } from "@/lib/format";
 
 /* Support share: answers of 4 or 5 as a percentage of responses */
 function shares(item: OverviewItem) {
@@ -30,8 +31,18 @@ export default async function DashboardPage() {
   const ctx = await getOrgContext();
   if (!ctx) redirect("/login");
   if (!ctx.membership || ctx.entitledDistricts.length === 0) redirect("/");
-  const primary = ctx.entitledDistricts.find((d) => d.id === "nyc") ?? ctx.entitledDistricts[0];
+  // The dashboard is the rundown for the org's own district: a New York
+  // senate office configured with 'ny' sees statewide sentiment here.
+  const primary =
+    ctx.entitledDistricts.find((d) => d.id === ctx.membership!.primaryDistrictId) ??
+    ctx.entitledDistricts.find((d) => d.id === "nyc") ??
+    ctx.entitledDistricts[0];
   const orgId = ctx.membership.orgId;
+  const meta = ctx.user.user_metadata as Record<string, unknown> | undefined;
+  const firstName =
+    typeof meta?.full_name === "string" && meta.full_name.trim()
+      ? meta.full_name.trim().split(/\s+/)[0]
+      : null;
   const supabase = await createClient();
 
   const [items, alignmentRows, { data: engagement }, { data: events }, { data: firstDay }, { data: lastDay }, { data: trackedFed }] =
@@ -113,10 +124,10 @@ export default async function DashboardPage() {
     <AppShell ctx={ctx} districtId={primary.id} active="Dashboard">
       <div className="mb-5">
         <h1 className="text-2xl font-semibold tracking-tight text-brand-900">
-          Good day, {ctx.membership.orgName}
+          Good day, {firstName ?? ctx.membership.orgName}
         </h1>
         <p className="text-sm text-muted">
-          {primary.name} is your primary district, with statewide and national
+          The rundown for {primary.name}, your district, with national
           comparison coverage.
         </p>
       </div>
@@ -139,7 +150,15 @@ export default async function DashboardPage() {
                 {topShares.support}%{" "}
                 <span className="text-sm font-normal text-muted">support</span>
               </div>
-              <div className="text-xs text-muted">
+              <div
+                className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-brand-100"
+                title={`${topShares.support}% support · ${topShares.neutral}% neutral · ${topShares.oppose}% oppose`}
+              >
+                <div style={{ width: `${topShares.support}%`, backgroundColor: "var(--brand-700)" }} />
+                <div style={{ width: `${topShares.neutral}%`, backgroundColor: "var(--brand-300)" }} />
+                <div style={{ width: `${topShares.oppose}%`, backgroundColor: "#d9d4e3" }} />
+              </div>
+              <div className="mt-1 text-xs text-muted">
                 most responded topic · {topShares.n.toLocaleString("en-US")} verified responses
               </div>
             </>
@@ -160,12 +179,18 @@ export default async function DashboardPage() {
               >
                 {shift.item.title}
               </Link>
-              <div className="mt-1 text-2xl font-semibold tabular-nums text-brand-800">
+              <div
+                className="mt-1 text-2xl font-semibold tabular-nums"
+                style={{ color: shift.delta! > 0 ? UP_COLOR : DOWN_COLOR }}
+              >
                 {shift.delta! > 0 ? "▲" : "▼"} {Math.abs(pts(shift.delta)!)} pts
               </div>
               <div className="text-xs text-muted">
-                support {shift.delta! > 0 ? "up" : "down"} over {shift.window} days ·{" "}
-                {primary.name} · {(shift.item.stats?.n ?? 0).toLocaleString("en-US")} responses
+                <span style={{ color: shift.delta! > 0 ? UP_COLOR : DOWN_COLOR }}>
+                  support {shift.delta! > 0 ? "up" : "down"}
+                </span>{" "}
+                over {shift.window} days · {primary.name} ·{" "}
+                {(shift.item.stats?.n ?? 0).toLocaleString("en-US")} responses
               </div>
             </>
           ) : (
@@ -233,6 +258,14 @@ export default async function DashboardPage() {
                 </span>
               ))}
             </div>
+            <div
+              className="mt-2 flex h-2.5 w-full min-w-72 overflow-hidden rounded-full bg-brand-100"
+              title="Share of this month's active respondents by party; the gray remainder did not state a party"
+            >
+              {mix.map((m) => (
+                <div key={m.party} style={{ width: `${m.pct}%`, backgroundColor: m.color }} />
+              ))}
+            </div>
           </div>
           <div className="ml-auto text-right">
             <div className="text-lg font-semibold tabular-nums text-brand-800">
@@ -254,24 +287,48 @@ export default async function DashboardPage() {
             <p className="text-sm text-muted">No items moved meaningfully this week.</p>
           ) : (
             <ul className="divide-y divide-border">
-              {movers.slice(0, 5).map(({ item, delta, window: w }) => (
-                <li key={`${item.kind}:${item.id}`} className="py-2.5">
-                  <Link
-                    href={`/districts/${primary.id}/items/${item.kind}/${encodeURIComponent(item.id)}`}
-                    className="block hover:text-brand-800"
-                  >
-                    <div className="line-clamp-1 text-sm font-medium">{item.title}</div>
-                    <div className="text-xs text-muted">
-                      <span className="font-semibold text-brand-800">
-                        {delta! > 0 ? "▲" : "▼"} support {delta! > 0 ? "up" : "down"}{" "}
-                        {Math.abs(pts(delta)!)} pts
-                      </span>{" "}
-                      over {w} days · {primary.name} ·{" "}
-                      {(item.stats?.n ?? 0).toLocaleString("en-US")} verified responses
-                    </div>
-                  </Link>
-                </li>
-              ))}
+              {movers.slice(0, 5).map(({ item, delta, window: w }) => {
+                const maxAbs = Math.max(...movers.slice(0, 5).map((m) => Math.abs(pts(m.delta)!)));
+                const p = pts(delta)!;
+                const half = Math.max((Math.abs(p) / Math.max(maxAbs, 0.1)) * 50, 2);
+                const color = p > 0 ? UP_COLOR : DOWN_COLOR;
+                return (
+                  <li key={`${item.kind}:${item.id}`} className="py-2.5">
+                    <Link
+                      href={`/districts/${primary.id}/items/${item.kind}/${encodeURIComponent(item.id)}`}
+                      className="block hover:text-brand-800"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="line-clamp-1 text-sm font-medium">{item.title}</div>
+                          <div className="text-xs text-muted">
+                            <span className="font-semibold" style={{ color }}>
+                              {p > 0 ? "▲" : "▼"} support {p > 0 ? "up" : "down"}{" "}
+                              {Math.abs(p)} pts
+                            </span>{" "}
+                            over {w} days ·{" "}
+                            {(item.stats?.n ?? 0).toLocaleString("en-US")} verified responses
+                          </div>
+                        </div>
+                        <div
+                          className="relative h-2.5 w-32 shrink-0 overflow-hidden rounded bg-brand-50"
+                          title={`${p > 0 ? "+" : ""}${p} points`}
+                        >
+                          <div className="absolute inset-y-0 left-1/2 w-px bg-border" />
+                          <div
+                            className="absolute inset-y-0 rounded-sm"
+                            style={
+                              p > 0
+                                ? { left: "50%", width: `${half}%`, backgroundColor: color }
+                                : { right: "50%", width: `${half}%`, backgroundColor: color }
+                            }
+                          />
+                        </div>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -311,7 +368,10 @@ export default async function DashboardPage() {
           <ul className="space-y-2 text-sm">
             {(events ?? []).map((e) => (
               <li key={e.id} className="rounded-lg bg-brand-50 px-3 py-2">
-                <span className="font-semibold text-brand-800">
+                <span
+                  className="font-semibold"
+                  style={{ color: Number(e.delta) > 0 ? UP_COLOR : DOWN_COLOR }}
+                >
                   {Number(e.delta) > 0 ? "▲" : "▼"} {Math.abs(Math.round(Number(e.delta) * 25 * 10) / 10)} pts
                 </span>{" "}
                 <span className="font-medium">{e.item_id}</span>{" "}

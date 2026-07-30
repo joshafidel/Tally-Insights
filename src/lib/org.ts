@@ -8,6 +8,7 @@ export type Membership = {
   orgId: string;
   orgName: string;
   role: OrgRole;
+  primaryDistrictId: string | null;
 };
 
 export type OrgContext = {
@@ -35,18 +36,22 @@ export const getOrgContext = cache(async (): Promise<OrgContext | null> => {
 
   const { data: memberRows } = await supabase
     .from("org_members")
-    .select("org_id, role, organizations(name)")
+    .select("org_id, role, organizations(name, primary_district_id)")
     .eq("user_id", user.id);
 
   const first = memberRows?.[0];
   if (!first)
     return { user, membership: null, entitledDistricts: [], features: [] };
 
-  const orgs = first.organizations as unknown as { name: string } | null;
+  const orgs = first.organizations as unknown as {
+    name: string;
+    primary_district_id: string | null;
+  } | null;
   const membership: Membership = {
     orgId: first.org_id,
     orgName: orgs?.name ?? "Organization",
     role: first.role as OrgRole,
+    primaryDistrictId: orgs?.primary_district_id ?? null,
   };
 
   const [{ data: entitlementRows }, { data: featureRows }] = await Promise.all([

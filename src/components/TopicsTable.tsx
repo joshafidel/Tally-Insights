@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DistBar } from "@/components/DistBar";
+import { deltaColor } from "@/lib/format";
 
 export type TopicRow = {
   id: string;
@@ -28,10 +29,14 @@ const DATE_PRESETS = [
   { key: "365", label: "Last year", days: 365 },
 ];
 
-function fmtDelta(v: number | null) {
-  if (v == null) return "n/a";
+function DeltaCell({ v }: { v: number | null }) {
+  if (v == null) return <>n/a</>;
   const arrow = Math.abs(v) < 0.005 ? "" : v > 0 ? " ▲" : " ▼";
-  return `${v > 0 ? "+" : ""}${v.toFixed(2)}${arrow}`;
+  return (
+    <span style={{ color: deltaColor(v) }}>
+      {`${v > 0 ? "+" : ""}${v.toFixed(2)}${arrow}`}
+    </span>
+  );
 }
 
 function fmtDate(iso: string | null) {
@@ -260,8 +265,8 @@ export function TopicsTable({
               <td className="px-4 py-2.5 text-right tabular-nums">
                 {r.n.toLocaleString("en-US")}
               </td>
-              <td className="px-4 py-2.5 text-right tabular-nums">{fmtDelta(r.change7)}</td>
-              <td className="px-4 py-2.5 text-right tabular-nums">{fmtDelta(r.change30)}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums"><DeltaCell v={r.change7} /></td>
+              <td className="px-4 py-2.5 text-right tabular-nums"><DeltaCell v={r.change30} /></td>
             </tr>
           ))}
           {filtered.length === 0 && (

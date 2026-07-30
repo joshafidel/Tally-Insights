@@ -19,6 +19,15 @@ export function deltaArrow(v: number | null): string {
   return v > 0 ? "▲" : "▼";
 }
 
+/* Movement semantics everywhere: up is green, down is red, and the words
+   next to an arrow carry the same color as the arrow. */
+export const UP_COLOR = "#15803d";
+export const DOWN_COLOR = "#b91c1c";
+export function deltaColor(v: number | null): string | undefined {
+  if (v == null || Math.abs(v) < 0.005) return undefined;
+  return v > 0 ? UP_COLOR : DOWN_COLOR;
+}
+
 export const PARTY_LABEL: Record<string, string> = {
   D: "Democrats",
   R: "Republicans",
