@@ -26,6 +26,12 @@ type CountyShape = { name: string; d: string };
 type CouncilShape = { num: number; d: string; centroid: number[] };
 
 export type GeoDistrictOption = { id: string; label: string; n: number };
+export type GeoFocus = {
+  key: string;
+  bounds: [number, number, number, number];
+  pad?: number;
+  minPad?: number;
+};
 
 export function GeoMap({
   counts,
@@ -34,6 +40,7 @@ export function GeoMap({
   councilDistricts,
   selectedDistrict,
   onSelectDistrict,
+  focus,
   height = 340,
   legend = "responses",
 }: {
@@ -43,6 +50,7 @@ export function GeoMap({
   councilDistricts?: GeoDistrictOption[];
   selectedDistrict?: string | null;
   onSelectDistrict?: (id: string | null) => void;
+  focus?: GeoFocus | null;
   height?: number;
   legend?: string;
 }) {
@@ -123,6 +131,19 @@ export function GeoMap({
     setVb([x0 - padX, y0 - padY, x1 - x0 + padX * 2, y1 - y0 + padY * 2]);
   };
 
+  // Search results and other outside controls hand the map a focus target.
+  const focusKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focus) {
+      focusKey.current = null;
+      return;
+    }
+    if (focusKey.current === focus.key) return;
+    focusKey.current = focus.key;
+    zoomTo(focus.bounds, focus.pad ?? 0.3, focus.minPad ?? 8);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
   // When a region is selected from outside the map (URL filter, chips),
   // carry the map with it so districts are the same map zoomed in.
   const autoState = useRef<string | null>(null);
@@ -181,7 +202,7 @@ export function GeoMap({
   };
 
   // Labels rescale continuously with zoom and carry a white halo.
-  const stateLabel = Math.min(Math.max(vb[2] / 42, 0.5), 20);
+  const stateLabel = Math.min(Math.max(vb[2] / 28, 0.5), 32);
   const districtLabelSize = Math.max(vb[2] / 38, 0.35);
 
   const smallLabels = useMemo(() => {
@@ -191,7 +212,7 @@ export function GeoMap({
     return smalls.map((s, i) => ({
       abbr: s.abbr,
       from: s.centroid,
-      to: [908, 118 + i * 36] as [number, number],
+      to: [902, 104 + i * 44] as [number, number],
     }));
   }, []);
 
@@ -364,14 +385,14 @@ export function GeoMap({
                 vectorEffect="non-scaling-stroke"
               />
               <text
-                x={l.to[0] + 4}
+                x={l.to[0] + 5}
                 y={l.to[1]}
                 dominantBaseline="middle"
-                fontSize={13}
+                fontSize={24}
                 fontWeight={700}
                 fill="var(--brand-900)"
                 stroke="white"
-                strokeWidth={2.2}
+                strokeWidth={3.6}
                 paintOrder="stroke"
               >
                 {l.abbr}
