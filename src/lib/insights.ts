@@ -9,6 +9,8 @@ export type CatalogItem = {
   subtitle: string;
   status: string | null;
   summary: string | null;
+  category: string | null;
+  createdAt: string | null;
 };
 
 export type ItemStats = {
@@ -71,7 +73,7 @@ export async function getCatalog(): Promise<CatalogItem[]> {
   const supabase = await createClient();
   const [{ data: topics }, { data: bills }, { data: liveBills }] =
     await Promise.all([
-      supabase.from("topics").select("id, title, category, prompt"),
+      supabase.from("topics").select("id, title, category, prompt, created_at"),
       supabase
         .from("bills")
         .select("id, title, chamber, sponsor, status, plain_summary"),
@@ -90,6 +92,8 @@ export async function getCatalog(): Promise<CatalogItem[]> {
       subtitle: `Topic · ${t.category}`,
       status: null,
       summary: t.prompt,
+      category: t.category,
+      createdAt: t.created_at ?? null,
     });
   }
   for (const b of bills ?? []) {
@@ -100,6 +104,8 @@ export async function getCatalog(): Promise<CatalogItem[]> {
       subtitle: `${b.chamber} · ${b.sponsor}`,
       status: b.status,
       summary: b.plain_summary,
+      category: null,
+      createdAt: null,
     });
   }
   for (const lb of liveBills ?? []) {
@@ -110,24 +116,11 @@ export async function getCatalog(): Promise<CatalogItem[]> {
       subtitle: `${lb.label ?? lb.id}${lb.sponsor ? ` · ${lb.sponsor}` : ""}${lb.policy_area ? ` · ${lb.policy_area}` : ""}`,
       status: lb.status,
       summary: lb.gen_summary ?? lb.short_summary,
+      category: lb.policy_area ?? null,
+      createdAt: null,
     });
   }
   return items;
-}
-
-function changeOver(points: ItemTrendPoint[], days: number): number | null {
-  if (points.length === 0) return null;
-  const latest = points[points.length - 1];
-  if (latest.avg_value == null) return null;
-  const cutoff = new Date(latest.day);
-  cutoff.setDate(cutoff.getDate() - days);
-  let past: ItemTrendPoint | null = null;
-  for (const p of points) {
-    if (new Date(p.day) <= cutoff) past = p;
-    else break;
-  }
-  if (!past || past.avg_value == null) return null;
-  return Math.round((latest.avg_value - past.avg_value) * 100) / 100;
 }
 
 export type OverviewItem = CatalogItem & {
@@ -143,7 +136,7 @@ export async function getDistrictOverview(
   party?: "D" | "R" | "I"
 ) {
   const supabase = await createClient();
-  const [catalog, { data: stats }, { data: trend }, { data: tracked }] =
+  const [catalog, { data: stats }, { data: movement }, { data: tracked }] =
     await Promise.all([
       getCatalog(),
       party
@@ -157,11 +150,9 @@ export async function getDistrictOverview(
             .select("*")
             .eq("district_id", districtId),
       supabase
-        .from("insights_item_trend")
+        .from("insights_item_movement")
         .select("*")
-        .eq("district_id", districtId)
-        .order("day", { ascending: true })
-        .limit(10000),
+        .eq("district_id", districtId),
       supabase
         .from("tracked_items")
         .select("kind, item_id")
@@ -183,29 +174,37 @@ export async function getDistrictOverview(
         subtitle: "Rated in the Tally app",
         status: null,
         summary: null,
+        category: null,
+        createdAt: null,
       });
     }
   }
 
   const statsMap = new Map<string, ItemStats>();
   for (const s of (stats ?? []) as ItemStats[]) statsMap.set(`${s.kind}:${s.item_id}`, s);
-  const trendMap = new Map<string, ItemTrendPoint[]>();
-  for (const p of (trend ?? []) as ItemTrendPoint[]) {
-    const key = `${p.kind}:${p.item_id}`;
-    const arr = trendMap.get(key) ?? [];
-    arr.push(p);
-    trendMap.set(key, arr);
+  type MovementRow = {
+    kind: string;
+    item_id: string;
+    avg_now: number | null;
+    avg_7d_ago: number | null;
+    avg_30d_ago: number | null;
+  };
+  const delta = (now: number | null, past: number | null) =>
+    now != null && past != null ? Math.round((now - past) * 100) / 100 : null;
+  const movementMap = new Map<string, MovementRow>();
+  for (const m of (movement ?? []) as MovementRow[]) {
+    movementMap.set(`${m.kind}:${m.item_id}`, m);
   }
   const trackedSet = new Set((tracked ?? []).map((t) => `${t.kind}:${t.item_id}`));
 
   const items: OverviewItem[] = catalog.map((c) => {
     const key = `${c.kind}:${c.id}`;
-    const points = trendMap.get(key) ?? [];
+    const m = movementMap.get(key);
     return {
       ...c,
       stats: statsMap.get(key) ?? null,
-      change7: changeOver(points, 7),
-      change30: changeOver(points, 30),
+      change7: m ? delta(m.avg_now, m.avg_7d_ago) : null,
+      change30: m ? delta(m.avg_now, m.avg_30d_ago) : null,
       tracked: trackedSet.has(key),
     };
   });
@@ -306,6 +305,8 @@ export async function getItemDetail(
       subtitle: "Rated in the Tally app",
       status: null,
       summary: null,
+      category: null,
+      createdAt: null,
     };
   }
 

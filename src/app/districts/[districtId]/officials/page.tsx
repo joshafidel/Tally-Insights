@@ -46,10 +46,10 @@ export default async function OfficialsPage({
         .select("*")
         .limit(1000),
       supabase
-        .from("insights_member_votes")
+        .from("insights_member_recent_votes")
         .select("*")
         .order("vote_date", { ascending: false })
-        .limit(20000),
+        .limit(5000),
     ]);
   await logAccess(ctx.membership.orgId, ctx.user.id, "view", "officials", {
     district_id: districtId,

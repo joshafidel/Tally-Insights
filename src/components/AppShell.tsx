@@ -23,18 +23,9 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const district = ctx.entitledDistricts.find((d) => d.id === districtId);
-  const simulated =
-    process.env.NEXT_PUBLIC_SIMULATED_DATA === "1" ||
-    (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").includes("vixukbrglksonesjzrdn");
 
   return (
     <div className="min-h-screen">
-      {simulated && (
-        <div className="bg-brand-900 px-4 py-1.5 text-center text-xs font-medium tracking-wide text-white">
-          SIMULATED DATA: every number on this site is synthetic, generated for
-          demonstration. Nothing here reflects real constituents.
-        </div>
-      )}
       <header className="sticky top-0 z-10 border-b border-brand-200 bg-gradient-to-r from-brand-50 via-card to-brand-50/60 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-6 py-3">
           <div className="flex items-center gap-8">

@@ -25,10 +25,9 @@ export default async function DashboardPage() {
         }))
       ),
       supabase
-        .from("insights_item_trend")
+        .from("insights_daily_volume")
         .select("*")
-        .order("day", { ascending: true })
-        .limit(20000),
+        .order("day", { ascending: true }),
       supabase
         .from("item_alert_rules")
         .select("id, active")
@@ -42,15 +41,10 @@ export default async function DashboardPage() {
     ]);
   await logAccess(orgId, ctx.user.id, "view", "dashboard");
 
-  // Daily response volume across all entitled districts: diff each item's
-  // cumulative series, then sum by day.
+  // Daily response volume summed across all entitled districts.
   const volumeByDay = new Map<string, number>();
-  const lastN = new Map<string, number>();
   for (const p of trendAll ?? []) {
-    const key = `${p.kind}:${p.item_id}:${p.district_id}`;
-    const inc = p.n - (lastN.get(key) ?? 0);
-    lastN.set(key, p.n);
-    if (inc > 0) volumeByDay.set(p.day, (volumeByDay.get(p.day) ?? 0) + inc);
+    volumeByDay.set(p.day, (volumeByDay.get(p.day) ?? 0) + p.responses);
   }
   const volume = [...volumeByDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
