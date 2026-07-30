@@ -4,7 +4,8 @@ import { isGuestEmail } from "@/lib/guest";
 
 const NAV = [
   { label: "Dashboard", href: () => `/dashboard` },
-  { label: "Overview", href: (d: string) => `/districts/${d}` },
+  { label: "Topics", href: (d: string) => `/districts/${d}/topics` },
+  { label: "Bills", href: (d: string) => `/districts/${d}/bills` },
   { label: "Officials", href: (d: string) => `/districts/${d}/officials` },
   { label: "Watchlist and alerts", href: (d: string) => `/districts/${d}/watchlist` },
   { label: "Methodology", href: (d: string) => `/methodology?district=${d}` },

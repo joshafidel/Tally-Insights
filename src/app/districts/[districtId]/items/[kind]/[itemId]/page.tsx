@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { Histogram } from "@/components/charts/Histogram";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { BreakdownBars, type BreakdownBar } from "@/components/BreakdownBars";
+import { DistrictTileMap } from "@/components/DistrictTileMap";
 import { SampleSize } from "@/components/Sample";
 import { PARTY_COLOR, PARTY_LABEL, statusLabel } from "@/lib/format";
 
@@ -49,6 +50,46 @@ export default async function ItemDetailPage({
       color:
         r.party === "U" ? "var(--brand-300)" : PARTY_COLOR[r.party] ?? "var(--brand-500)",
     }));
+
+  const AGE_ORDER = ["18-29", "30-44", "45-64", "65+", "unknown"];
+  const ageBracketBars: BreakdownBar[] = AGE_ORDER.map((a) =>
+    detail.ageBrackets.find((r) => r.age_bucket === a)
+  )
+    .filter((r): r is NonNullable<typeof r> => Boolean(r))
+    .map((r) => ({
+      key: r.age_bucket!,
+      label: r.age_bucket === "unknown" ? "Age unknown" : r.age_bucket!,
+      avg: r.avg_value,
+      n: r.n,
+      color: "var(--brand-500)",
+    }));
+
+  const SEX_ORDER = ["f", "m", "x", "unknown"];
+  const SEX_LABELS: Record<string, string> = {
+    f: "Women",
+    m: "Men",
+    x: "X on ID",
+    unknown: "Not collected",
+  };
+  const sexBars: BreakdownBar[] = SEX_ORDER.map((s) =>
+    detail.sexRows.find((r) => r.sex === s)
+  )
+    .filter((r): r is NonNullable<typeof r> => Boolean(r))
+    .map((r) => ({
+      key: r.sex!,
+      label: SEX_LABELS[r.sex!] ?? r.sex!,
+      avg: r.avg_value,
+      n: r.n,
+      color: "var(--brand-500)",
+    }));
+
+  const raceBars: BreakdownBar[] = detail.raceRows.map((r) => ({
+    key: r.race!,
+    label: r.race === "unknown" ? "Not stated" : r.race!,
+    avg: r.avg_value,
+    n: r.n,
+    color: "var(--brand-500)",
+  }));
 
   const trendPoints = trend.map((p) => ({
     day: p.day,
@@ -133,7 +174,8 @@ export default async function ItemDetailPage({
         </section>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Who is weighing in: the five breakdowns a legislative office needs */}
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-muted">
             By party
@@ -144,26 +186,97 @@ export default async function ItemDetailPage({
             <p className="text-sm text-muted">No responses yet.</p>
           )}
           <p className="mt-4 text-xs text-muted">
-            Party comes from the voter file match at verification. Age and sex
-            breakdowns arrive once the consumer app collects them at signup.
+            Party not stated means the rater has not declared one in the app.
           </p>
         </section>
 
         <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
-              Sentiment trend (cumulative mean by day)
-            </h2>
-          </div>
-          {trendPoints.length > 1 ? (
-            <TrendChart points={trendPoints} />
+          <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-muted">
+            By age bracket
+          </h2>
+          {ageBracketBars.length > 0 ? (
+            <BreakdownBars rows={ageBracketBars} />
           ) : (
-            <p className="text-sm text-muted">
-              Trend appears once responses span more than one day.
-            </p>
+            <p className="text-sm text-muted">No responses yet.</p>
           )}
+          <p className="mt-4 text-xs text-muted">
+            Ages come from birth year captured at ID verification. Unknown
+            means verification predates collection.
+          </p>
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-muted">
+            By sex
+          </h2>
+          {sexBars.length > 0 ? (
+            <BreakdownBars rows={sexBars} />
+          ) : (
+            <p className="text-sm text-muted">No responses yet.</p>
+          )}
+          <p className="mt-4 text-xs text-muted">
+            Sex as listed on ID at verification. Unknown means not yet
+            collected for that rater.
+          </p>
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-muted">
+            By race
+          </h2>
+          {raceBars.length > 0 ? (
+            <BreakdownBars rows={raceBars} />
+          ) : (
+            <p className="text-sm text-muted">No responses yet.</p>
+          )}
+          <p className="mt-4 text-xs text-muted">
+            Race is self reported and optional. Unknown means the rater has
+            not answered.
+          </p>
         </section>
       </div>
+
+      <section className="mt-4 rounded-xl border border-border bg-card p-5 shadow-sm">
+        <div className="mb-2 flex items-baseline justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
+            District consensus map
+          </h2>
+          <span className="text-xs text-muted">
+            Every district reporting on this item, shaded by mean sentiment
+          </span>
+        </div>
+        {!ctx.features.includes("district_exact") ? (
+          <p className="text-sm text-muted">
+            District level maps are available on a higher tier. Contact your
+            Tally account representative to enable them.
+          </p>
+        ) : detail.exactDistricts.length > 0 ? (
+          <DistrictTileMap
+            rows={detail.exactDistricts}
+            rootDistrictName={district.name}
+          />
+        ) : (
+          <p className="text-sm text-muted">
+            No district level responses for this item yet. Tiles appear as
+            constituents in each district weigh in.
+          </p>
+        )}
+      </section>
+
+      <section className="mt-4 rounded-xl border border-border bg-card p-5 shadow-sm">
+        <div className="mb-2 flex items-baseline justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
+            Sentiment trend (cumulative mean by day)
+          </h2>
+        </div>
+        {trendPoints.length > 1 ? (
+          <TrendChart points={trendPoints} />
+        ) : (
+          <p className="text-sm text-muted">
+            Trend appears once responses span more than one day.
+          </p>
+        )}
+      </section>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="rounded-xl border border-brand-300 bg-gradient-to-b from-card to-brand-50/60 p-5 shadow-sm">

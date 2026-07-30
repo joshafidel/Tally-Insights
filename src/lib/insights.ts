@@ -234,6 +234,9 @@ export async function getItemDetail(
     { data: trend },
     { data: ageYears },
     { data: exactDistricts },
+    { data: ageBrackets },
+    { data: sexRows },
+    { data: raceRows },
   ] = await Promise.all([
     getCatalog(),
     supabase
@@ -271,6 +274,26 @@ export async function getItemDetail(
       .eq("kind", kind)
       .eq("item_id", itemId)
       .order("n", { ascending: false }),
+    supabase
+      .from("insights_item_age_bracket")
+      .select("*")
+      .eq("district_id", districtId)
+      .eq("kind", kind)
+      .eq("item_id", itemId)
+      .order("age_bucket", { ascending: true }),
+    supabase
+      .from("insights_item_sex")
+      .select("*")
+      .eq("district_id", districtId)
+      .eq("kind", kind)
+      .eq("item_id", itemId),
+    supabase
+      .from("insights_item_race")
+      .select("*")
+      .eq("district_id", districtId)
+      .eq("kind", kind)
+      .eq("item_id", itemId)
+      .order("n", { ascending: false }),
   ]);
 
   let item = catalog.find((c) => c.kind === kind && c.id === itemId) ?? null;
@@ -305,8 +328,23 @@ export async function getItemDetail(
       avg_value: number | null;
       low_sample: boolean;
     }[],
+    ageBrackets: (ageBrackets ?? []) as DemographicRow[],
+    sexRows: (sexRows ?? []) as DemographicRow[],
+    raceRows: (raceRows ?? []) as DemographicRow[],
   };
 }
+
+export type DemographicRow = {
+  kind: string;
+  item_id: string;
+  district_id: string;
+  age_bucket?: string;
+  sex?: string;
+  race?: string;
+  n: number;
+  avg_value: number | null;
+  low_sample: boolean;
+};
 
 export async function getAlignment(districtIds: string[]) {
   const supabase = await createClient();
