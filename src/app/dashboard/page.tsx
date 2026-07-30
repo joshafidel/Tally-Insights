@@ -1,262 +1,274 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getOrgContext } from "@/lib/org";
-import { getDistrictOverview, logAccess } from "@/lib/insights";
+import {
+  getAlignment,
+  getDistrictOverview,
+  logAccess,
+  type OverviewItem,
+} from "@/lib/insights";
 import { AppShell } from "@/components/AppShell";
-import { VolumeChart } from "@/components/charts/VolumeChart";
 import { DistBar } from "@/components/DistBar";
 import { createClient } from "@/lib/supabase/server";
-import { deltaArrow, formatDelta } from "@/lib/format";
+
+/* Support share: answers of 4 or 5 as a percentage of responses */
+function shares(item: OverviewItem) {
+  const d = item.stats?.distribution;
+  const n = item.stats?.n ?? 0;
+  if (!d || n === 0) return null;
+  const support = Math.round(((d[3] + d[4]) / n) * 100);
+  const oppose = Math.round(((d[0] + d[1]) / n) * 100);
+  return { support, oppose, neutral: Math.max(0, 100 - support - oppose), n };
+}
+
+/* Mean shift on the 1 to 5 scale expressed as approximate support points */
+function pts(delta: number | null): number | null {
+  return delta == null ? null : Math.round(delta * 25 * 10) / 10;
+}
 
 export default async function DashboardPage() {
   const ctx = await getOrgContext();
   if (!ctx) redirect("/login");
   if (!ctx.membership || ctx.entitledDistricts.length === 0) redirect("/");
-  const primary = ctx.entitledDistricts[0];
+  const primary = ctx.entitledDistricts.find((d) => d.id === "nyc") ?? ctx.entitledDistricts[0];
   const orgId = ctx.membership.orgId;
   const supabase = await createClient();
 
-  const [
-    { data: partyEngagement },
-    { data: registrations },
-  ] = await Promise.all([
-    supabase.from("insights_party_engagement").select("*"),
-    supabase.from("insights_registrations").select("*").order("month"),
-  ]);
-  const [overviews, { data: trendAll }, { data: rules }, { data: events }] =
+  const [items, alignmentRows, { data: engagement }, { data: events }, { data: firstDay }, { data: lastDay }, { data: trackedFed }] =
     await Promise.all([
-      Promise.all(
-        ctx.entitledDistricts.map(async (d) => ({
-          district: d,
-          items: await getDistrictOverview(orgId, d.id),
-        }))
-      ),
-      supabase
-        .from("insights_daily_volume")
-        .select("*")
-        .order("day", { ascending: true }),
-      supabase
-        .from("item_alert_rules")
-        .select("id, active")
-        .eq("org_id", orgId),
+      getDistrictOverview(orgId, primary.id),
+      getAlignment([primary.id, "us"]),
+      supabase.from("insights_party_engagement").select("*"),
       supabase
         .from("item_alert_events")
         .select("*")
         .eq("org_id", orgId)
         .order("fired_at", { ascending: false })
-        .limit(5),
+        .limit(4),
+      supabase.from("insights_daily_volume").select("day").order("day", { ascending: true }).limit(1),
+      supabase.from("insights_daily_volume").select("day").order("day", { ascending: false }).limit(1),
+      supabase
+        .from("tracked_items")
+        .select("item_id")
+        .eq("org_id", orgId)
+        .eq("kind", "live_bill"),
     ]);
   await logAccess(orgId, ctx.user.id, "view", "dashboard");
 
-  // Daily response volume summed across all entitled districts.
-  const volumeByDay = new Map<string, number>();
-  for (const p of trendAll ?? []) {
-    volumeByDay.set(p.day, (volumeByDay.get(p.day) ?? 0) + p.responses);
-  }
-  const volume = [...volumeByDay.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([day, responses]) => ({ day, responses }));
+  const withData = items.filter((i) => (i.stats?.n ?? 0) > 0);
 
-  const allItems = overviews.flatMap((o) =>
-    o.items.map((i) => ({ ...i, district: o.district }))
-  );
-  const withData = allItems.filter((i) => (i.stats?.n ?? 0) > 0);
-  const totalResponses = withData.reduce((a, i) => a + (i.stats?.n ?? 0), 0);
-  const tracked = allItems.filter((i) => i.tracked);
+  // Card 1: top district priority (most responded topic)
+  const topTopic = withData.filter((i) => i.kind === "topic")[0] ?? null;
+  const topShares = topTopic ? shares(topTopic) : null;
+
+  // Card 2: largest opinion shift
   const movers = withData
-    .filter((i) => i.change7 != null || i.change30 != null)
-    .sort(
-      (a, b) =>
-        Math.max(Math.abs(b.change7 ?? 0), Math.abs(b.change30 ?? 0)) -
-        Math.max(Math.abs(a.change7 ?? 0), Math.abs(a.change30 ?? 0))
-    )
-    .slice(0, 4);
-  const recentRated = withData.slice(0, 8);
-  const unacked = (events ?? []).filter((e) => !e.acknowledged_at).length;
+    .map((i) => ({ item: i, delta: i.change7 ?? i.change30, window: i.change7 != null ? 7 : 30 }))
+    .filter((m) => m.delta != null && Math.abs(m.delta) >= 0.02)
+    .sort((a, b) => Math.abs(b.delta!) - Math.abs(a.delta!));
+  const shift = movers[0] ?? null;
 
-  const engagement = (partyEngagement ?? []) as {
-    party: string;
-    constituents: number;
-    engaged_this_month: number;
-    engaged_last_month: number;
-    new_this_month: number;
-  }[];
-  const verifiedTotal = engagement.reduce((a, r) => a + r.constituents, 0);
-  const newThisMonth = engagement.reduce((a, r) => a + r.new_this_month, 0);
-  const partyTile = (party: string, label: string, color: string) => {
-    const r = engagement.find((e) => e.party === party);
-    if (!r || r.constituents === 0) return { label, color, pct: null, delta: 0, n: 0 };
-    const pct = Math.round((r.engaged_this_month / r.constituents) * 100);
-    const prev = Math.round((r.engaged_last_month / r.constituents) * 100);
-    return { label, color, pct, delta: pct - prev, n: r.constituents };
-  };
-  const partyTiles = [
-    partyTile("D", "of Democrats weighed in this month", "var(--party-d)"),
-    partyTile("R", "of Republicans weighed in this month", "var(--party-r)"),
-    partyTile("I", "of Independents weighed in this month", "var(--party-i)"),
-  ];
-  const regPoints = ((registrations ?? []) as { month: string; registrations: number }[]).map(
-    (r) => ({ day: r.month, responses: r.registrations })
-  );
+  // Card 3: largest representation gap
+  const gaps = alignmentRows
+    .filter((r) => ["against_district_support", "with_what_district_opposes"].includes(r.alignment))
+    .sort((a, b) => (b.gap ?? 0) - (a.gap ?? 0));
+  const gap = gaps[0] ?? null;
+
+  // Card 4: most recent action on a tracked federal bill
+  let nextAction: { title: string; action: string; date: string | null } | null = null;
+  const fedIds = (trackedFed ?? []).map((t) => t.item_id);
+  if (fedIds.length > 0) {
+    const { data: lb } = await supabase
+      .from("live_bills")
+      .select("title, latest_action, latest_action_date")
+      .in("id", fedIds)
+      .order("latest_action_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lb) nextAction = { title: lb.title, action: lb.latest_action ?? "", date: lb.latest_action_date };
+  }
+
+  // Monthly active respondent mix (share of active respondents, not of all constituents)
+  const eng = (engagement ?? []) as { party: string; constituents: number; engaged_this_month: number }[];
+  const activeTotal = eng.reduce((a, r) => a + r.engaged_this_month, 0);
+  const mix = ["D", "R", "I"].map((p) => ({
+    party: p,
+    label: p === "D" ? "Democrats" : p === "R" ? "Republicans" : "Independents",
+    color: p === "D" ? "var(--party-d)" : p === "R" ? "var(--party-r)" : "var(--party-i)",
+    pct: activeTotal ? Math.round(((eng.find((e) => e.party === p)?.engaged_this_month ?? 0) / activeTotal) * 100) : 0,
+  }));
+  const verified = eng.reduce((a, r) => a + r.constituents, 0);
+
+  const days = [firstDay?.[0]?.day, lastDay?.[0]?.day].filter(Boolean) as string[];
+  const fmtD = (d?: string) =>
+    d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+  const simulated = process.env.NEXT_PUBLIC_SIMULATED_DATA === "1";
+
+  const gapDirection = (a: string) =>
+    a === "against_district_support"
+      ? "District supports, office opposed"
+      : "District opposes, office supported";
 
   return (
     <AppShell ctx={ctx} districtId={primary.id} active="Dashboard">
-      <div className="mb-6">
+      <div className="mb-5">
         <h1 className="text-2xl font-semibold tracking-tight text-brand-900">
           Good day, {ctx.membership.orgName}
         </h1>
         <p className="text-sm text-muted">
-          Live constituent sentiment across your{" "}
-          {ctx.entitledDistricts.length === 1
-            ? "district"
-            : `${ctx.entitledDistricts.length} districts`}
-          : {ctx.entitledDistricts.map((d) => d.name).join(", ")}.
+          {primary.name} is your primary district, with statewide and national
+          comparison coverage.
         </p>
       </div>
 
-      {/* District pulse: mirrors the consumer app header a politician knows */}
-      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <div className="rounded-2xl border border-brand-200 bg-card px-5 py-4 shadow-sm">
-          <div className="text-3xl font-semibold tabular-nums text-brand-700">
-            {verifiedTotal.toLocaleString("en-US")}
+      {/* What a legislative office needs first */}
+      <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-brand-200 bg-card p-5 shadow-sm">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Top district priority
           </div>
-          <div className="text-xs text-muted">
-            verified constituents
-            {newThisMonth > 0 ? ` (+${newThisMonth.toLocaleString("en-US")} new this month)` : ""}
+          {topTopic && topShares ? (
+            <>
+              <Link
+                href={`/districts/${primary.id}/items/topic/${topTopic.id}`}
+                className="line-clamp-2 text-sm font-semibold text-brand-900 hover:underline"
+              >
+                {topTopic.title}
+              </Link>
+              <div className="mt-1 text-2xl font-semibold tabular-nums text-brand-800">
+                {topShares.support}%{" "}
+                <span className="text-sm font-normal text-muted">support</span>
+              </div>
+              <div className="text-xs text-muted">
+                most responded topic · {topShares.n.toLocaleString("en-US")} verified responses
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted">Appears once constituents respond.</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-brand-200 bg-card p-5 shadow-sm">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Largest opinion shift
+          </div>
+          {shift ? (
+            <>
+              <Link
+                href={`/districts/${primary.id}/items/${shift.item.kind}/${encodeURIComponent(shift.item.id)}`}
+                className="line-clamp-2 text-sm font-semibold text-brand-900 hover:underline"
+              >
+                {shift.item.title}
+              </Link>
+              <div className="mt-1 text-2xl font-semibold tabular-nums text-brand-800">
+                {shift.delta! > 0 ? "▲" : "▼"} {Math.abs(pts(shift.delta)!)} pts
+              </div>
+              <div className="text-xs text-muted">
+                support {shift.delta! > 0 ? "up" : "down"} over {shift.window} days ·{" "}
+                {primary.name} · {(shift.item.stats?.n ?? 0).toLocaleString("en-US")} responses
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted">No meaningful movement this week.</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-brand-200 bg-card p-5 shadow-sm">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Largest representation gap
+          </div>
+          {gap ? (
+            <>
+              <div className="line-clamp-2 text-sm font-semibold text-brand-900">
+                {gap.bill_title}
+              </div>
+              <div className="mt-1 text-sm font-semibold text-brand-800">
+                {gapDirection(gap.alignment)}
+              </div>
+              <div className="text-xs text-muted">
+                {gap.official_name} voted {gap.vote} · district mean{" "}
+                {gap.district_avg?.toFixed(2)} · n={gap.sample_n.toLocaleString("en-US")}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted">
+              No scored votes conflict with district sentiment right now.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-brand-200 bg-card p-5 shadow-sm">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Latest action on a tracked bill
+          </div>
+          {nextAction ? (
+            <>
+              <div className="line-clamp-2 text-sm font-semibold text-brand-900">
+                {nextAction.title}
+              </div>
+              <div className="mt-1 line-clamp-2 text-sm text-brand-800">
+                {nextAction.action}
+              </div>
+              <div className="text-xs text-muted">{fmtD(nextAction.date ?? undefined)}</div>
+            </>
+          ) : (
+            <p className="text-sm text-muted">
+              Track federal bills to follow their floor and committee actions here.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Respondent mix: shares of active respondents, an honest denominator */}
+      <div className="mb-4 rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Monthly active respondent mix
+            </div>
+            <div className="mt-1 flex items-baseline gap-5">
+              {mix.map((m) => (
+                <span key={m.party} className="text-lg font-semibold tabular-nums" style={{ color: m.color }}>
+                  {m.label} {m.pct}%
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="ml-auto text-right">
+            <div className="text-lg font-semibold tabular-nums text-brand-800">
+              {verified.toLocaleString("en-US")}
+            </div>
+            <div className="text-xs text-muted">
+              verified constituents · {activeTotal.toLocaleString("en-US")} responded this month
+            </div>
           </div>
         </div>
-        {partyTiles.map((t) => (
-          <div key={t.label} className="rounded-2xl border border-brand-200 bg-card px-5 py-4 shadow-sm">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-semibold tabular-nums" style={{ color: t.color }}>
-                {t.pct != null ? `${t.pct}%` : "n/a"}
-              </span>
-              {t.pct != null && t.delta !== 0 && (
-                <span className="text-xs text-muted">
-                  {t.delta > 0 ? "▲" : "▼"} {Math.abs(t.delta)}
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-muted">{t.label}</div>
-          </div>
-        ))}
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        {[
-          { label: "Verified responses", value: totalResponses },
-          { label: "Items with sentiment", value: withData.length },
-          { label: "Items tracked", value: tracked.length },
-          {
-            label: "Alerts (unacknowledged)",
-            value: unacked,
-            sub: `${(rules ?? []).filter((r) => r.active).length} active ${
-              (rules ?? []).filter((r) => r.active).length === 1 ? "rule" : "rules"
-            }`,
-          },
-        ].map((t) => (
-          <div
-            key={t.label}
-            className="rounded-2xl border border-brand-200 bg-gradient-to-b from-card to-brand-50/70 px-5 py-4 shadow-sm"
-          >
-            <div className="text-3xl font-semibold tabular-nums text-brand-800">
-              {t.value.toLocaleString("en-US")}
-            </div>
-            <div className="text-xs uppercase tracking-wide text-muted">
-              {t.label}
-            </div>
-            {"sub" in t && t.sub && (
-              <div className="mt-0.5 text-xs text-muted">{t.sub}</div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm xl:col-span-2">
-          <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
-              Constituent activity (responses per day)
-            </h2>
-            <span className="text-xs text-muted">
-              all entitled districts, n={totalResponses.toLocaleString("en-US")} total
-            </span>
-          </div>
-          {volume.length > 0 ? (
-            <VolumeChart points={volume} />
-          ) : (
-            <p className="text-sm text-muted">No responses yet.</p>
-          )}
-          <div className="mt-4 border-t border-border pt-3">
-            <h3 className="mb-1 text-sm font-medium uppercase tracking-wide text-muted">
-              New verified registrations by month
-            </h3>
-            {regPoints.length > 0 ? (
-              <VolumeChart points={regPoints} />
-            ) : (
-              <p className="text-sm text-muted">No registrations recorded yet.</p>
-            )}
-          </div>
-        </section>
-
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
-            Latest alerts
-          </h2>
-          {(events ?? []).length === 0 ? (
-            <p className="text-sm text-muted">
-              No alerts fired yet. Rules run daily against live ratings;
-              manage them on the{" "}
-              <Link
-                href={`/districts/${primary.id}/watchlist`}
-                className="text-brand-700 hover:underline"
-              >
-                watchlist page
-              </Link>
-              .
-            </p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {(events ?? []).map((e) => (
-                <li key={e.id} className="rounded-lg bg-brand-50 px-3 py-2">
-                  <span className="font-medium">{e.item_id}</span>{" "}
-                  <span className="text-muted">
-                    moved {e.delta} to {e.new_mean} (n={e.sample_n})
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
-            Biggest movers
+            Biggest movers ({primary.name})
           </h2>
           {movers.length === 0 ? (
-            <p className="text-sm text-muted">
-              Movement appears once items collect responses on more than one
-              day.
-            </p>
+            <p className="text-sm text-muted">No items moved meaningfully this week.</p>
           ) : (
             <ul className="divide-y divide-border">
-              {movers.map((m) => (
-                <li key={`${m.kind}:${m.id}:${m.district.id}`} className="py-2">
+              {movers.slice(0, 5).map(({ item, delta, window: w }) => (
+                <li key={`${item.kind}:${item.id}`} className="py-2.5">
                   <Link
-                    href={`/districts/${m.district.id}/items/${m.kind}/${encodeURIComponent(m.id)}`}
-                    className="flex items-center justify-between gap-3 hover:text-brand-800"
+                    href={`/districts/${primary.id}/items/${item.kind}/${encodeURIComponent(item.id)}`}
+                    className="block hover:text-brand-800"
                   >
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                      {m.title}
-                    </span>
-                    <span className="text-sm tabular-nums">
-                      {formatDelta(m.change7 ?? m.change30)}{" "}
-                      <span className="text-xs text-muted">
-                        {deltaArrow(m.change7 ?? m.change30)}
-                      </span>
-                    </span>
+                    <div className="line-clamp-1 text-sm font-medium">{item.title}</div>
+                    <div className="text-xs text-muted">
+                      <span className="font-semibold text-brand-800">
+                        {delta! > 0 ? "▲" : "▼"} support {delta! > 0 ? "up" : "down"}{" "}
+                        {Math.abs(pts(delta)!)} pts
+                      </span>{" "}
+                      over {w} days · {primary.name} ·{" "}
+                      {(item.stats?.n ?? 0).toLocaleString("en-US")} verified responses
+                    </div>
                   </Link>
                 </li>
               ))}
@@ -266,31 +278,83 @@ export default async function DashboardPage() {
 
         <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
-            Live sentiment (most responses first)
+            Where the district stands (most responses first)
           </h2>
           <ul className="divide-y divide-border">
-            {recentRated.map((i) => (
-              <li key={`${i.kind}:${i.id}:${i.district.id}`} className="py-2">
-                <Link
-                  href={`/districts/${i.district.id}/items/${i.kind}/${encodeURIComponent(i.id)}`}
-                  className="flex items-center gap-3 hover:text-brand-800"
-                >
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {i.title}
-                  </span>
-                  <DistBar distribution={i.stats?.distribution ?? null} className="w-24" />
-                  <span className="w-12 text-right text-sm font-semibold tabular-nums text-brand-800">
-                    {i.stats?.avg_value?.toFixed(2)}
-                  </span>
-                  <span className="w-10 text-right text-xs text-muted">
-                    n={i.stats?.n}
-                  </span>
-                </Link>
-              </li>
-            ))}
+            {withData.slice(0, 7).map((i) => {
+              const s = shares(i)!;
+              return (
+                <li key={`${i.kind}:${i.id}`} className="py-2.5">
+                  <Link
+                    href={`/districts/${primary.id}/items/${i.kind}/${encodeURIComponent(i.id)}`}
+                    className="flex items-center gap-3 hover:text-brand-800"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{i.title}</span>
+                    <DistBar distribution={i.stats?.distribution ?? null} className="w-20" />
+                    <span className="w-56 shrink-0 text-right text-xs tabular-nums">
+                      <span className="font-semibold text-brand-800">{s.support}% support</span>
+                      <span className="text-muted"> · {s.oppose}% oppose · n={s.n.toLocaleString("en-US")}</span>
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </section>
       </div>
+
+      <section className="mt-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
+          Alerts
+        </h2>
+        {(events ?? []).length > 0 ? (
+          <ul className="space-y-2 text-sm">
+            {(events ?? []).map((e) => (
+              <li key={e.id} className="rounded-lg bg-brand-50 px-3 py-2">
+                <span className="font-semibold text-brand-800">
+                  {Number(e.delta) > 0 ? "▲" : "▼"} {Math.abs(Math.round(Number(e.delta) * 25 * 10) / 10)} pts
+                </span>{" "}
+                <span className="font-medium">{e.item_id}</span>{" "}
+                <span className="text-muted">
+                  · mean {e.old_mean} to {e.new_mean} · n={Number(e.sample_n).toLocaleString("en-US")} ·{" "}
+                  {fmtD(String(e.fired_at).slice(0, 10))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div>
+            <p className="mb-2 text-sm text-muted">
+              No alerts have fired yet. Rules run daily against live ratings.
+              Recommended rules to start with:
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
+              <li>Notify me when support for a tracked item changes by more than 5 points</li>
+              <li>Notify me when an item passes 500 district responses</li>
+              <li>Notify me when district sentiment conflicts with an official&apos;s vote</li>
+            </ul>
+            <Link
+              href={`/districts/${primary.id}/watchlist`}
+              className="mt-2 inline-block text-sm text-brand-700 hover:underline"
+            >
+              Set up alert rules →
+            </Link>
+          </div>
+        )}
+      </section>
+
+      {/* Data quality: the front page carries its own methodology summary */}
+      <section className="mt-4 rounded-2xl border border-border bg-brand-50/60 px-5 py-3 text-xs text-muted">
+        <span className="font-semibold text-brand-800">About this data:</span>{" "}
+        {days.length > 0 ? `responses from ${fmtD(days[0])} to ${fmtD(days[days.length - 1])}` : "no responses yet"}
+        {" · updated continuously · coverage: New York City at council district level, all 50 states, national"}
+        {" · unweighted means of ID verified constituents · top line floor n=50, demographic floor n=5"}
+        {" · self selected respondents, not a probability sample"}
+        {simulated ? " · SIMULATED DATASET for demonstration" : ""}{" "}
+        <Link href={`/methodology?district=${primary.id}`} className="text-brand-700 hover:underline">
+          Full methodology →
+        </Link>
+      </section>
     </AppShell>
   );
 }

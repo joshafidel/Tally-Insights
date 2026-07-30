@@ -19,7 +19,8 @@ import { US_STATES } from "@/lib/usStatesGeo";
 const FULL: [number, number, number, number] = [0, 0, 975, 610];
 const SMALL_STATES = new Set(["CT", "RI", "DE", "NJ", "MD", "MA", "NH", "VT", "DC"]);
 const COUNTY_VB = 260; // show counties when viewBox width is below this
-const DISTRICT_VB = 45; // show sub districts when viewBox width is below this
+const OUTLINE_VB = 170; // sub district boundaries become visible below this
+const DISTRICT_VB = 45; // sub districts become interactive below this
 
 type CountyShape = { name: string; d: string };
 type CouncilShape = { num: number; d: string; centroid: number[] };
@@ -76,7 +77,11 @@ export function GeoMap({
     );
   }, [vb]);
 
-  const showDistricts = vb[2] < DISTRICT_VB && (councilDistricts?.length ?? 0) > 0;
+  const hasCouncil = (councilDistricts?.length ?? 0) > 0;
+  // One continuous map: district boundaries fade in while zooming toward the
+  // city, then become clickable at close zoom. Never a separate view.
+  const outlineDistricts = vb[2] < OUTLINE_VB && hasCouncil;
+  const showDistricts = vb[2] < DISTRICT_VB && hasCouncil;
 
   useEffect(() => {
     if (zoomedState && !counties) {
@@ -84,10 +89,10 @@ export function GeoMap({
     }
   }, [zoomedState, counties]);
   useEffect(() => {
-    if (vb[2] < DISTRICT_VB * 3 && !council && (councilDistricts?.length ?? 0) > 0) {
+    if ((vb[2] < OUTLINE_VB * 2 || selectedDistrict) && !council && hasCouncil) {
       fetch("/nyc-council.json").then((r) => r.json()).then(setCouncil).catch(() => {});
     }
-  }, [vb, council, councilDistricts]);
+  }, [vb, council, hasCouncil, selectedDistrict]);
 
   // Non passive wheel listener: React's synthetic onWheel cannot
   // preventDefault, which is why the page scrolled instead of zooming.
@@ -111,12 +116,49 @@ export function GeoMap({
     return () => svg.removeEventListener("wheel", handler);
   }, []);
 
-  const zoomTo = (bounds: number[], pad = 0.3) => {
+  const zoomTo = (bounds: number[], pad = 0.3, minPad = 8) => {
     const [x0, y0, x1, y1] = bounds;
-    const padX = Math.max((x1 - x0) * pad, 8);
-    const padY = Math.max((y1 - y0) * pad, 8);
+    const padX = Math.max((x1 - x0) * pad, minPad);
+    const padY = Math.max((y1 - y0) * pad, minPad);
     setVb([x0 - padX, y0 - padY, x1 - x0 + padX * 2, y1 - y0 + padY * 2]);
   };
+
+  // When a region is selected from outside the map (URL filter, chips),
+  // carry the map with it so districts are the same map zoomed in.
+  const autoState = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedState) {
+      autoState.current = null;
+      return;
+    }
+    if (autoState.current === selectedState) return;
+    autoState.current = selectedState;
+    if (vbRef.current[2] >= FULL[2] * 0.9) {
+      const st = US_STATES.find((s) => s.abbr === selectedState);
+      if (st) zoomTo(st.bounds);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedState]);
+
+  const autoDistrict = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedDistrict) {
+      autoDistrict.current = null;
+      return;
+    }
+    if (!council || autoDistrict.current === selectedDistrict) return;
+    autoDistrict.current = selectedDistrict;
+    if (vbRef.current[2] >= DISTRICT_VB) {
+      const xs = council.map((c) => c.centroid[0]);
+      const ys = council.map((c) => c.centroid[1]);
+      zoomTo(
+        [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
+        0.25,
+        1
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDistrict, council]);
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     drag.current = { x: e.clientX, y: e.clientY, moved: false };
@@ -231,8 +273,9 @@ export function GeoMap({
           </path>
         ))}
 
-        {/* Sub districts appear only past the zoom threshold */}
-        {showDistricts &&
+        {/* Sub district boundaries fade in while zooming toward the city
+            and become double clickable at close zoom: one continuous map */}
+        {outlineDistricts &&
           (council ?? []).map((c) => {
             const id = `nyc-cc-${c.num}`;
             const isSel = selectedDistrict === id;
@@ -252,9 +295,10 @@ export function GeoMap({
                 }
                 fillOpacity={isSel ? 1 : 0.9}
                 stroke={isSel ? "var(--brand-900)" : "#3a5a86"}
-                strokeWidth={isSel ? 3 : 1.25}
+                strokeWidth={isSel ? 3 : showDistricts ? 1.25 : 0.6}
                 vectorEffect="non-scaling-stroke"
-                className="cursor-pointer hover:opacity-85"
+                pointerEvents={showDistricts ? "auto" : "none"}
+                className={showDistricts ? "cursor-pointer hover:opacity-85" : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
                 }}
