@@ -116,7 +116,7 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
             Find officials on the map
           </h2>
-          <GeoMap counts={mapCounts} selectedState={state} onSelectState={setState} height={300} />
+          <GeoMap counts={mapCounts} selectedState={state} onSelectState={setState} height={300} legend="officials" />
         </div>
         {selected && (
           <div className="mt-6">

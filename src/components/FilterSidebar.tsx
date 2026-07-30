@@ -77,9 +77,20 @@ export function FilterSidebar({
   const [open, setOpen] = useState(true);
   const [zoomState, setZoomState] = useState<string | null>(null);
 
-  const rootOfState = (abbr: string) =>
-    districts.find((d) => d.state === abbr && d.district_id === d.root_district)
-      ?.district_id ?? null;
+  const rootOfState = (abbr: string) => {
+    const roots = districts.filter(
+      (d) => d.state === abbr && d.district_id === d.root_district
+    );
+    if (roots.length === 0) return null;
+    return roots.sort((a, b) => b.n - a.n)[0].district_id;
+  };
+
+  const f0 = parseAudience(Object.fromEntries(sp.entries()));
+  const selectedStateFromFilter = f0.district
+    ? (districts.find((d) => d.district_id === f0.district)?.state ??
+       districts.find((d) => d.root_district === f0.district)?.state ??
+       null)
+    : null;
 
   const f = parseAudience(Object.fromEntries(sp.entries()));
 
@@ -190,7 +201,7 @@ export function FilterSidebar({
         </div>
         <GeoMap
           counts={stateCounts}
-          selectedState={zoomState}
+          selectedState={selectedStateFromFilter}
           onSelectState={(s) => {
             setZoomState(s);
             if (!s) apply({ d: null, exact: null });

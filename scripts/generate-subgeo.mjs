@@ -16,7 +16,7 @@ const STATE_FIPS = {
   "54":"WV","55":"WI","56":"WY",
 };
 
-const round = (d) => d.replace(/(\d+\.\d{1})\d+/g, "$1");
+const round = (d, n = 1) => d.replace(new RegExp("(\\d+\\.\\d{" + n + "})\\d+", "g"), "$1");
 
 // Counties in the national Albers space
 const topo = JSON.parse(readFileSync("node_modules/us-atlas/counties-10m.json", "utf8"));
@@ -38,13 +38,12 @@ console.log("counties:", kept);
 
 // NYC council districts in their own fitted view (975x610)
 const gj = JSON.parse(readFileSync(process.env.COUNCIL_SRC, "utf8"));
-const merc = geoMercator().fitExtent([[10, 10], [965, 600]], gj);
-const nPath = geoPath(merc);
+const nPath = geoPath(albers);
 const districts = gj.features
   .map((f) => ({
     num: Number(f.properties.CounDist),
-    d: round(nPath(f) ?? ""),
-    centroid: nPath.centroid(f).map((v) => Math.round(v * 10) / 10),
+    d: round(nPath(f) ?? "", 4),
+    centroid: nPath.centroid(f).map((v) => Math.round(v * 10000) / 10000),
   }))
   .filter((f) => f.d)
   .sort((a, b) => a.num - b.num);
