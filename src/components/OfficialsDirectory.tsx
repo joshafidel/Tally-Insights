@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { UsGeoMap } from "@/components/UsGeoMap";
+import { GeoMap } from "@/components/GeoMap";
 import {
   Scorecard,
   type OfficialSummary,
@@ -116,7 +116,7 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
             Find officials on the map
           </h2>
-          <UsGeoMap counts={mapCounts} selected={state} onSelect={setState} />
+          <GeoMap counts={mapCounts} selectedState={state} onSelectState={setState} height={300} />
         </div>
         {selected && (
           <div className="mt-6">

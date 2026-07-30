@@ -22,8 +22,6 @@ export function AppShell({
   active: string;
   children: React.ReactNode;
 }) {
-  const district = ctx.entitledDistricts.find((d) => d.id === districtId);
-
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-brand-200 bg-gradient-to-r from-brand-50 via-card to-brand-50/60 backdrop-blur">
@@ -54,31 +52,11 @@ export function AppShell({
             </nav>
           </div>
           <div className="flex items-center gap-4">
-            {ctx.entitledDistricts.length > 1 && (
-              <div className="hidden items-center gap-1 rounded-md border border-border bg-white p-0.5 md:flex">
-                {ctx.entitledDistricts.map((d) => (
-                  <Link
-                    key={d.id}
-                    href={`/districts/${d.id}`}
-                    className={
-                      d.id === districtId
-                        ? "rounded bg-brand-100 px-2 py-1 text-xs font-medium text-brand-800"
-                        : "rounded px-2 py-1 text-xs text-muted hover:bg-brand-50"
-                    }
-                  >
-                    {d.name}
-                  </Link>
-                ))}
-              </div>
-            )}
             <div className="text-right">
               <div className="text-sm font-medium">
                 {isGuestEmail(ctx.user.email)
                   ? "Guest preview"
                   : ctx.membership?.orgName}
-              </div>
-              <div className="text-xs text-muted">
-                {district ? `${district.name} (${district.state})` : ""}
               </div>
             </div>
             {isGuestEmail(ctx.user.email) ? (
@@ -115,20 +93,6 @@ export function AppShell({
               {item.label}
             </Link>
           ))}
-          {ctx.entitledDistricts.length > 1 &&
-            ctx.entitledDistricts.map((d) => (
-              <Link
-                key={d.id}
-                href={`/districts/${d.id}`}
-                className={
-                  d.id === districtId
-                    ? "shrink-0 whitespace-nowrap rounded-full bg-brand-100 px-3 py-1.5 text-xs font-medium text-brand-800"
-                    : "shrink-0 whitespace-nowrap rounded-full border border-dashed border-brand-300 bg-white px-3 py-1.5 text-xs text-muted"
-                }
-              >
-                {d.name}
-              </Link>
-            ))}
         </nav>
       </header>
       <main className="mx-auto w-full max-w-[1400px] px-4 py-5 md:px-6 md:py-6">{children}</main>

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { UsTileMap } from "@/components/UsTileMap";
+import { GeoMap } from "@/components/GeoMap";
 import {
   AGE_OPTIONS,
   PARTY_OPTIONS,
@@ -77,6 +77,10 @@ export function FilterSidebar({
   const [open, setOpen] = useState(true);
   const [zoomState, setZoomState] = useState<string | null>(null);
 
+  const rootOfState = (abbr: string) =>
+    districts.find((d) => d.state === abbr && d.district_id === d.root_district)
+      ?.district_id ?? null;
+
   const f = parseAudience(Object.fromEntries(sp.entries()));
 
   const apply = (patch: Record<string, string | null>) => {
@@ -132,7 +136,7 @@ export function FilterSidebar({
   }
 
   return (
-    <aside className="sticky top-20 h-fit w-[280px] shrink-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <aside className="sticky top-20 h-fit w-[340px] shrink-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="flex items-center justify-between border-b border-border bg-brand-50 px-3 py-2">
         <span className="text-sm font-semibold text-brand-900">
           Filter the audience{activeCount > 0 ? ` (${activeCount})` : ""}
@@ -184,10 +188,25 @@ export function FilterSidebar({
               </Chip>
             ))}
         </div>
-        <UsTileMap
+        <GeoMap
           counts={stateCounts}
-          selected={zoomState}
-          onSelect={(s) => setZoomState(s)}
+          selectedState={zoomState}
+          onSelectState={(s) => {
+            setZoomState(s);
+            if (!s) apply({ d: null, exact: null });
+            else {
+              const root = rootOfState(s);
+              if (root) apply({ d: root, exact: null });
+            }
+          }}
+          councilDistricts={districts
+            .filter((d) => d.district_id.includes("-cc-"))
+            .map((d) => ({ id: d.district_id, label: d.district_id, n: d.n }))}
+          selectedDistrict={f.exact ? f.district : null}
+          onSelectDistrict={(id) =>
+            id ? apply({ d: id, exact: "1" }) : apply({ d: null, exact: null })
+          }
+          height={260}
         />
         {zoomState && (
           <div className="mt-2">

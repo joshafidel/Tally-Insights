@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getOrgContext } from "@/lib/org";
-import { getItemDetail, logAccess, type ItemKind } from "@/lib/insights";
+import {
+  getAvailableDistricts,
+  getFilteredOverview,
+  getItemDetail,
+  logAccess,
+  type ItemKind,
+} from "@/lib/insights";
+import { districtLabel, hasAudienceFilters, parseAudience } from "@/lib/filters";
+import { FilterSidebar } from "@/components/FilterSidebar";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/AppShell";
 import { TrendChart } from "@/components/charts/TrendChart";
@@ -11,7 +19,6 @@ import {
   type DistributionTabsData,
   type GroupDistribution,
 } from "@/components/DistributionTabs";
-import { DistrictTileMap } from "@/components/DistrictTileMap";
 import { SampleSize, Suppressed } from "@/components/Sample";
 import { PARTY_COLOR, PARTY_LABEL, statusLabel } from "@/lib/format";
 import {
@@ -30,10 +37,15 @@ const SEX_LABELS: Record<string, string> = {
 
 export default async function ItemDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ districtId: string; kind: string; itemId: string }>;
+  searchParams: Promise<Record<string, string>>;
 }) {
   const { districtId, kind, itemId: rawItemId } = await params;
+  const audience = parseAudience(await searchParams);
+  const audienceActive = hasAudienceFilters(audience);
+  const effectiveRoot = (audience.district ?? districtId).split("-")[0];
   const itemId = decodeURIComponent(rawItemId);
   if (!KINDS.includes(kind as ItemKind)) notFound();
 
@@ -44,8 +56,9 @@ export default async function ItemDetailPage({
   if (!district) notFound();
 
   const supabase = await createClient();
-  const [detail, { data: trackedRow }] = await Promise.all([
-    getItemDetail(districtId, kind as ItemKind, itemId),
+  const [detail, availableDistricts, { data: trackedRow }] = await Promise.all([
+    getItemDetail(effectiveRoot, kind as ItemKind, itemId),
+    getAvailableDistricts(),
     supabase
       .from("tracked_items")
       .select("item_id")
@@ -62,7 +75,17 @@ export default async function ItemDetailPage({
     item_id: itemId,
   });
 
-  const { item, stats, trend } = detail;
+  const { item, trend } = detail;
+  let stats = detail.stats;
+  if (audienceActive) {
+    const filtered = await getFilteredOverview(
+      ctx.membership.orgId,
+      districtId,
+      audience
+    );
+    const mine = filtered.find((i) => i.kind === kind && i.id === itemId);
+    stats = mine?.stats ?? { ...detail.stats, n: 0, avg_value: null, distribution: null } as never;
+  }
   const isTracked = Boolean(trackedRow);
   const canEdit = ctx.membership.role !== "viewer";
 
@@ -128,6 +151,14 @@ export default async function ItemDetailPage({
 
   return (
     <AppShell ctx={ctx} districtId={districtId} active="Overview">
+      <div className="flex items-start gap-5">
+        <div className="hidden md:block">
+          <FilterSidebar
+            districts={availableDistricts}
+            hasExactFeature={ctx.features.includes("district_exact")}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
       <div className="mb-6">
         <Link
           href={`/districts/${districtId}/${kind === "topic" ? "topics" : "bills"}`}
@@ -177,8 +208,17 @@ export default async function ItemDetailPage({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <h2 className="mb-1 text-sm font-medium uppercase tracking-wide text-muted">
-            District sentiment
+            {audienceActive ? "Filtered sentiment" : "District sentiment"}
           </h2>
+          {audienceActive && (
+            <p className="mb-1 text-xs text-muted">
+              Scope: {districtLabel(audience.district ?? districtId)}
+              {audience.party.length + audience.age.length + audience.sex.length + audience.race.length > 0
+                ? " with demographic filters applied"
+                : ""}
+              . Tabs and trend show the full {districtLabel(effectiveRoot)} audience.
+            </p>
+          )}
           {stats?.avg_value != null ? (
             <>
               <div className="text-4xl font-semibold tabular-nums text-brand-800">
@@ -212,26 +252,6 @@ export default async function ItemDetailPage({
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
-              District consensus map
-            </h2>
-          </div>
-          {!ctx.features.includes("district_exact") ? (
-            <p className="text-sm text-muted">
-              District level maps are available on a higher tier.
-            </p>
-          ) : detail.exactDistricts.length > 0 ? (
-            <DistrictTileMap
-              rows={detail.exactDistricts}
-              rootDistrictName={district.name}
-            />
-          ) : (
-            <p className="text-sm text-muted">No district level responses yet.</p>
-          )}
-        </section>
-
         <section className="rounded-xl border border-brand-300 bg-gradient-to-b from-card to-brand-50/60 p-5 shadow-sm">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
@@ -274,6 +294,8 @@ export default async function ItemDetailPage({
           </p>
         )}
       </section>
+        </div>
+      </div>
     </AppShell>
   );
 }
