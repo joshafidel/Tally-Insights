@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { isExactRegion, type AudienceFilters } from "@/lib/filters";
+import { cachedAvailableDistricts, cachedCatalogRaw } from "@/lib/contentCache";
 
 export type ItemKind = "topic" | "bill" | "live_bill";
 
@@ -73,20 +74,32 @@ export const KIND_LABEL: Record<ItemKind, string> = {
   consumer app stores those titles on the weigh in row).
 */
 export const getCatalog = cache(async (): Promise<CatalogItem[]> => {
-  const supabase = await createClient();
-  // List fields only: summaries are large and fetched by the detail page.
-  const [{ data: topics }, { data: bills }, { data: liveBills }] =
-    await Promise.all([
-      supabase.from("topics").select("id, title, category, created_at"),
-      supabase.from("bills").select("id, title, chamber, sponsor, status"),
-      supabase
-        .from("live_bills")
-        .select("id, title, label, status, sponsor, policy_area")
-        .limit(1000),
-    ]);
+  // Cross request content cache first (service role, revalidates on a
+  // timer); fall back to a per request read when no service key exists.
+  let raw = await cachedCatalogRaw().catch(() => null);
+  if (!raw) {
+    const supabase = await createClient();
+    // List fields only: summaries are large and fetched by the detail page.
+    const [{ data: topics }, { data: bills }, { data: liveBills }] =
+      await Promise.all([
+        supabase.from("topics").select("id, title, category, created_at"),
+        supabase.from("bills").select("id, title, chamber, sponsor, status, topic_category"),
+        supabase
+          .from("live_bills")
+          .select("id, title, label, status, sponsor, policy_area")
+          .limit(1000),
+      ]);
+    raw = {
+      topics: topics ?? [],
+      bills: bills ?? [],
+      liveBills: liveBills ?? [],
+      districts: [],
+    };
+  }
+  const { topics, bills, liveBills } = raw;
 
   const items: CatalogItem[] = [];
-  for (const t of topics ?? []) {
+  for (const t of topics) {
     items.push({
       kind: "topic",
       id: t.id,
@@ -98,19 +111,19 @@ export const getCatalog = cache(async (): Promise<CatalogItem[]> => {
       createdAt: t.created_at ?? null,
     });
   }
-  for (const b of bills ?? []) {
+  for (const b of bills) {
     items.push({
       kind: "bill",
       id: b.id,
       title: b.title,
-      subtitle: `${b.chamber} · ${b.sponsor}`,
+      subtitle: [b.chamber, b.sponsor].filter(Boolean).join(" · "),
       status: b.status,
       summary: null,
-      category: null,
+      category: b.topic_category ?? null,
       createdAt: null,
     });
   }
-  for (const lb of liveBills ?? []) {
+  for (const lb of liveBills) {
     items.push({
       kind: "live_bill",
       id: lb.id,
@@ -426,7 +439,22 @@ export type AvailableDistrictRow = {
 };
 
 export const getAvailableDistricts = cache(
-  async (): Promise<AvailableDistrictRow[]> => {
+  async (orgId?: string): Promise<AvailableDistrictRow[]> => {
+    // Cross request cache path: org scoped counts plus the cached district
+    // to state mapping, no weigh_ins scan on the request path.
+    if (orgId) {
+      const [cachedRows, catalogRaw] = await Promise.all([
+        cachedAvailableDistricts(orgId).catch(() => null),
+        cachedCatalogRaw().catch(() => null),
+      ]);
+      if (cachedRows && catalogRaw) {
+        const stateOf = new Map(catalogRaw.districts.map((d) => [d.id, d.state]));
+        return cachedRows.map((a) => ({
+          ...a,
+          state: stateOf.get(a.root_district) ?? "US",
+        }));
+      }
+    }
     const supabase = await createClient();
     // County granularity pushed the underlying view past PostgREST's 1000
     // row page size; the rpc returns the full set as one JSON payload.

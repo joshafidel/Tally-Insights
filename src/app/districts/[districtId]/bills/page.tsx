@@ -30,19 +30,32 @@ export default async function BillsPage({
 
   const [all, availableDistricts] = await Promise.all([
     getFilteredOverview(ctx.membership.orgId, districtId, audience),
-    getAvailableDistricts(),
+    getAvailableDistricts(ctx.membership.orgId),
   ]);
   const bills = all.filter((i) => i.kind === "bill" || i.kind === "live_bill");
   await logAccess(ctx.membership.orgId, ctx.user.id, "view", "bills", {
     district_id: audience.districts.join(",") || districtId,
   });
 
-  const rows: TopicRow[] = bills.map((b) => ({
+  // Jurisdiction is its own axis: Federal, State, or City. Policy category
+  // stays a separate column and filter.
+  const jurisdictionOf = (b: (typeof bills)[number]) => {
+    if (b.kind === "live_bill") return "Federal";
+    if (b.id.startsWith("nyc-")) return "City (NYC)";
+    return "State";
+  };
+  // With a region selected, only bills that region actually rated appear:
+  // another state's or city's bills have no place in a Texas view.
+  const scoped = audience.districts.length
+    ? bills.filter((b) => (b.stats?.n ?? 0) > 0)
+    : bills;
+  const rows: TopicRow[] = scoped.map((b) => ({
     id: b.id,
     kind: b.kind,
     status: b.status,
     title: b.title,
-    category: b.kind === "bill" ? "City and curated" : (b.category ?? "Federal"),
+    category: b.category ?? "Other",
+    jurisdiction: jurisdictionOf(b),
     createdAt: null,
     mean: b.stats?.avg_value ?? null,
     distribution: b.stats?.distribution ?? null,
@@ -111,6 +124,7 @@ export default async function BillsPage({
               canTrack={ctx.membership.role !== "viewer"}
               showAdded={false}
               showStatus={true}
+              showJurisdiction={true}
               itemLabel="Bill"
             />
           </div>

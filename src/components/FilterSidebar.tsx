@@ -350,9 +350,6 @@ export function FilterSidebar({
           counts={stateCounts}
           selectedRegions={regions}
           onSelectRegions={setRegions}
-          councilDistricts={districts
-            .filter((d) => d.district_id.includes("-cc-"))
-            .map((d) => ({ id: d.district_id, label: d.district_id, n: d.n }))}
           countyCounts={countyCounts}
           focus={focus}
           height={380}

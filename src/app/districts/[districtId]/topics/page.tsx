@@ -30,7 +30,7 @@ export default async function TopicsPage({
 
   const [all, availableDistricts] = await Promise.all([
     getFilteredOverview(ctx.membership.orgId, districtId, audience),
-    getAvailableDistricts(),
+    getAvailableDistricts(ctx.membership.orgId),
   ]);
   const topics = all.filter((i) => i.kind === "topic");
   await logAccess(ctx.membership.orgId, ctx.user.id, "view", "topics", {

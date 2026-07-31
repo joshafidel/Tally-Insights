@@ -20,6 +20,70 @@ export type DistributionTabsData = {
 };
 
 const RAMP = ["#c9b3e8", "#ad8ddb", "#8f66c9", "#6f44ae", "#4f2b8c"];
+const LEVELS = [
+  "Strongly disagree",
+  "Disagree",
+  "Neutral",
+  "Agree",
+  "Strongly agree",
+];
+
+/* The overall view mirrors the Tally app: one labeled bar per answer with
+   its percentage on the right and a verified constituents line below. */
+function TallyBars({
+  n,
+  distribution,
+}: {
+  n: number;
+  distribution: number[] | null;
+}) {
+  const d = distribution ?? [0, 0, 0, 0, 0];
+  const total = d.reduce((a, b) => a + b, 0);
+  if (total === 0)
+    return <p className="text-sm text-muted">No responses in this view yet.</p>;
+  return (
+    <div className="pt-1">
+      <div className="space-y-2.5">
+        {LEVELS.map((label, i) => {
+          const pct = Math.round((d[i] / total) * 100);
+          return (
+            <div key={label} className="flex items-center gap-3">
+              <div className="w-36 shrink-0 text-right text-sm font-medium text-brand-900">
+                {label}
+              </div>
+              <div
+                className="h-6 flex-1 overflow-hidden rounded-full bg-brand-50"
+                title={`${label} · ${pct}% of all voters (${d[i].toLocaleString("en-US")} responses)`}
+              >
+                <div
+                  className="flex h-full items-center justify-end rounded-full pr-2"
+                  style={{
+                    width: `${Math.max(pct, 2)}%`,
+                    backgroundColor: RAMP[i],
+                    transition: "width 300ms ease",
+                  }}
+                >
+                  {pct >= 12 && (
+                    <span className="text-[11px] font-semibold text-white">
+                      {pct}%
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums text-brand-900">
+                {pct}%
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 border-t border-border pt-2 text-sm">
+        <span className="font-semibold text-emerald-700">✓ {n.toLocaleString("en-US")} verified constituents</span>{" "}
+        <span className="text-muted">weighed in on this question</span>
+      </div>
+    </div>
+  );
+}
 
 function GroupRows({ groups }: { groups: GroupDistribution[] }) {
   if (groups.length === 0)
@@ -37,19 +101,28 @@ function GroupRows({ groups }: { groups: GroupDistribution[] }) {
               />
               <span className="truncate text-sm">{g.label}</span>
             </div>
-            <div className="flex h-5 flex-1 items-stretch gap-[2px]">
-              {(g.distribution ?? [0, 0, 0, 0, 0]).map((count, i) => (
-                <div
-                  key={i}
-                  className="rounded-[3px]"
-                  title={`${i + 1}: ${count} (${total ? Math.round((count / total) * 100) : 0}%)`}
-                  style={{
-                    backgroundColor: RAMP[i],
-                    width: `${total ? Math.max((count / total) * 100, 1.5) : 20}%`,
-                    opacity: total ? 1 : 0.15,
-                  }}
-                />
-              ))}
+            <div className="flex h-6 flex-1 items-stretch gap-[2px]">
+              {(g.distribution ?? [0, 0, 0, 0, 0]).map((count, i) => {
+                const pct = total ? Math.round((count / total) * 100) : 0;
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center justify-center overflow-hidden rounded-[3px]"
+                    title={`${LEVELS[i]} · ${pct}% of ${g.label}`}
+                    style={{
+                      backgroundColor: RAMP[i],
+                      width: `${total ? Math.max(pct, 1.5) : 20}%`,
+                      opacity: total ? 1 : 0.15,
+                    }}
+                  >
+                    {pct >= 10 && (
+                      <span className="text-[10px] font-semibold text-white">
+                        {pct}%
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div className="w-28 shrink-0 text-right text-sm tabular-nums">
               <span className="font-semibold text-brand-800">
@@ -61,7 +134,10 @@ function GroupRows({ groups }: { groups: GroupDistribution[] }) {
         );
       })}
       <div className="flex justify-between pt-1 text-xs text-muted">
-        <span>each bar: share of that group answering 1 (left) to 5 (right)</span>
+        <span>
+          each bar: strongly disagree (left) to strongly agree (right); hover a
+          segment for its share
+        </span>
       </div>
     </div>
   );
@@ -95,22 +171,10 @@ export function DistributionTabs({ data }: { data: DistributionTabsData }) {
           </button>
         ))}
       </div>
-      {/* Every tab renders the same stacked bar rows, inside a fixed height
-          panel so switching filters never resizes the card */}
+      {/* Fixed height panel so switching tabs never resizes the card */}
       <div className="min-h-[248px]">
         {tab === "all" ? (
-          <GroupRows
-            groups={[
-              {
-                key: "all",
-                label: "All voters",
-                color: "var(--brand-600)",
-                n: data.all.n,
-                avg: data.all.avg ?? null,
-                distribution: data.all.distribution,
-              },
-            ]}
-          />
+          <TallyBars n={data.all.n} distribution={data.all.distribution} />
         ) : (
           <GroupRows groups={data[tab]} />
         )}

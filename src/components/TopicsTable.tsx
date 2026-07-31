@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { DistBar } from "@/components/DistBar";
 import { deltaColor } from "@/lib/format";
 import {
@@ -22,6 +23,7 @@ export type TopicRow = {
   change7: number | null;
   change30: number | null;
   tracked: boolean;
+  jurisdiction?: string | null;
 };
 
 type SortKey = "title" | "category" | "added" | "mean" | "n" | "c7" | "c30";
@@ -43,6 +45,49 @@ function DeltaCell({ v }: { v: number | null }) {
   );
 }
 
+/* The button flips instantly and stays one fixed size on one line; the
+   server action and revalidation catch up in the background. */
+function TrackButton({
+  row,
+  districtId,
+  orgId,
+}: {
+  row: TopicRow;
+  districtId: string;
+  orgId?: string;
+}) {
+  const [optimistic, setOptimistic] = useState<boolean | null>(null);
+  const tracked = optimistic ?? row.tracked;
+  return (
+    <form
+      action={tracked ? removeTrackedItem : addTrackedItem}
+      onSubmit={() => setOptimistic(!tracked)}
+    >
+      <input type="hidden" name="org_id" value={orgId} />
+      <input type="hidden" name="district_id" value={districtId} />
+      <input type="hidden" name="item" value={`${row.kind}:${row.id}`} />
+      <input type="hidden" name="kind" value={row.kind} />
+      <input type="hidden" name="item_id" value={row.id} />
+      <button
+        type="submit"
+        className={
+          "w-[86px] whitespace-nowrap rounded-md border px-2 py-1 text-center text-xs " +
+          (tracked
+            ? "border-brand-400 bg-brand-100 font-medium text-brand-800 hover:bg-brand-50"
+            : "border-border bg-white text-muted hover:border-brand-400 hover:text-brand-800")
+        }
+        title={
+          tracked
+            ? "Untrack: remove from your dashboard and alert rules"
+            : "Track: pin to your dashboard and enable alert rules"
+        }
+      >
+        {tracked ? "Tracked ✓" : "Track"}
+      </button>
+    </form>
+  );
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-US", {
@@ -59,6 +104,7 @@ export function TopicsTable({
   canTrack = false,
   showAdded = true,
   showStatus = false,
+  showJurisdiction = false,
   itemLabel = "Topic",
 }: {
   rows: TopicRow[];
@@ -67,12 +113,16 @@ export function TopicsTable({
   canTrack?: boolean;
   showAdded?: boolean;
   showStatus?: boolean;
+  showJurisdiction?: boolean;
   itemLabel?: string;
 }) {
+  const sp = useSearchParams();
+  const qs = sp.toString() ? `?${sp.toString()}` : "";
   const [sortKey, setSortKey] = useState<SortKey>("n");
   const [sortDesc, setSortDesc] = useState(true);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [categories, setCategories] = useState<Set<string>>(new Set());
+  const [jurisdictions, setJurisdictions] = useState<Set<string>>(new Set());
   const [datePreset, setDatePreset] = useState("any");
 
   const allCategories = useMemo(() => {
@@ -84,10 +134,21 @@ export function TopicsTable({
     return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [rows]);
 
+  const allJurisdictions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const j = r.jurisdiction ?? "Other";
+      counts.set(j, (counts.get(j) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [rows]);
+
   const filtered = useMemo(() => {
     let out = rows;
     if (categories.size > 0)
       out = out.filter((r) => categories.has(r.category ?? "other"));
+    if (jurisdictions.size > 0)
+      out = out.filter((r) => jurisdictions.has(r.jurisdiction ?? "Other"));
     const preset = DATE_PRESETS.find((p) => p.key === datePreset);
     if (preset?.days != null) {
       const cutoff = Date.now() - preset.days * 86400_000;
@@ -113,7 +174,7 @@ export function TopicsTable({
       if (av > bv) return 1 * dir;
       return 0;
     });
-  }, [rows, categories, datePreset, sortKey, sortDesc]);
+  }, [rows, categories, jurisdictions, datePreset, sortKey, sortDesc]);
 
   const sortBy = (key: SortKey, defaultDesc = true) => {
     if (sortKey === key) setSortDesc(!sortDesc);
@@ -125,7 +186,7 @@ export function TopicsTable({
   const indicator = (key: SortKey) =>
     sortKey === key ? (sortDesc ? " ▼" : " ▲") : "";
 
-  const th = "px-4 py-2.5 font-medium text-left text-xs uppercase tracking-wide text-muted select-none";
+  const th = "whitespace-nowrap px-4 py-2.5 font-medium text-left text-xs uppercase tracking-wide text-muted select-none";
   const btn = "hover:text-brand-800 cursor-pointer";
 
   return (
@@ -180,6 +241,49 @@ export function TopicsTable({
                 </div>
               )}
             </th>
+            {showJurisdiction && (
+              <th className={`${th} relative`}>
+                <button
+                  type="button"
+                  className={`${btn} rounded border px-1.5 py-0.5 ${jurisdictions.size > 0 ? "border-brand-500 bg-brand-100 text-brand-800" : "border-transparent"}`}
+                  onClick={() =>
+                    setOpenMenu(openMenu === "jurisdiction" ? null : "jurisdiction")
+                  }
+                >
+                  Level{jurisdictions.size > 0 ? ` (${jurisdictions.size})` : ""} ▾
+                </button>
+                {openMenu === "jurisdiction" && (
+                  <div className="absolute left-2 top-full z-20 mt-1 w-56 rounded-lg border border-border bg-white p-2 shadow-lg">
+                    <button
+                      type="button"
+                      className="mb-1 w-full rounded px-2 py-1 text-left text-xs normal-case text-brand-700 hover:bg-brand-50"
+                      onClick={() => setJurisdictions(new Set())}
+                    >
+                      Clear filter (show all)
+                    </button>
+                    {allJurisdictions.map(([j, count]) => (
+                      <label
+                        key={j}
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm normal-case tracking-normal text-foreground hover:bg-brand-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={jurisdictions.has(j)}
+                          onChange={(e) => {
+                            const next = new Set(jurisdictions);
+                            if (e.target.checked) next.add(j);
+                            else next.delete(j);
+                            setJurisdictions(next);
+                          }}
+                        />
+                        <span className="flex-1">{j}</span>
+                        <span className="text-xs text-muted">{count}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </th>
+            )}
             {showStatus && <th className={th}>Status</th>}
             {showAdded && <th className={`${th} relative`}>
               <button
@@ -243,20 +347,21 @@ export function TopicsTable({
         <tbody>
           {filtered.map((r) => (
             <tr key={r.id} className="border-t border-border hover:bg-brand-50/50">
-              <td className="max-w-[420px] px-4 py-2.5">
+              <td className="min-w-[280px] max-w-[520px] px-4 py-2.5">
                 <Link
-                  href={`/districts/${districtId}/items/${r.kind}/${encodeURIComponent(r.id)}`}
-                  className="font-medium text-brand-800 hover:underline"
+                  href={`/districts/${districtId}/items/${r.kind}/${encodeURIComponent(r.id)}${qs}`}
+                  className="line-clamp-2 font-medium text-brand-800 hover:underline"
+                  title={r.title}
                 >
                   {r.title}
                 </Link>
-                {r.tracked && (
-                  <span className="ml-2 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-brand-700">
-                    tracked
-                  </span>
-                )}
               </td>
-              <td className="px-4 py-2.5 text-muted">{r.category ?? "Other"}</td>
+              <td className="whitespace-nowrap px-4 py-2.5 text-muted">{r.category ?? "Other"}</td>
+              {showJurisdiction && (
+                <td className="whitespace-nowrap px-4 py-2.5 text-muted">
+                  {r.jurisdiction ?? "Other"}
+                </td>
+              )}
               {showStatus && <td className="px-4 py-2.5 capitalize text-muted">{(r.status ?? "").replaceAll("_", " ")}</td>}
               {showAdded && <td className="whitespace-nowrap px-4 py-2.5 text-muted">{fmtDate(r.createdAt)}</td>}
               <td className="px-4 py-2.5 text-right">
@@ -278,28 +383,7 @@ export function TopicsTable({
               <td className="px-4 py-2.5 text-right tabular-nums"><DeltaCell v={r.change30} /></td>
               {canTrack && (
                 <td className="px-4 py-2.5">
-                  <form action={r.tracked ? removeTrackedItem : addTrackedItem}>
-                    <input type="hidden" name="org_id" value={orgId} />
-                    <input type="hidden" name="district_id" value={districtId} />
-                    <input type="hidden" name="item" value={`${r.kind}:${r.id}`} />
-                    <input type="hidden" name="kind" value={r.kind} />
-                    <input type="hidden" name="item_id" value={r.id} />
-                    <button
-                      type="submit"
-                      className={
-                        r.tracked
-                          ? "rounded-md border border-brand-400 bg-brand-100 px-2 py-1 text-xs font-medium text-brand-800 hover:bg-brand-50"
-                          : "rounded-md border border-border bg-white px-2 py-1 text-xs text-muted hover:border-brand-400 hover:text-brand-800"
-                      }
-                      title={
-                        r.tracked
-                          ? "Untrack: remove from your dashboard and alert rules"
-                          : "Track: pin to your dashboard and enable alert rules"
-                      }
-                    >
-                      {r.tracked ? "Tracked ✓" : "Track"}
-                    </button>
-                  </form>
+                  <TrackButton row={r} districtId={districtId} orgId={orgId} />
                 </td>
               )}
             </tr>

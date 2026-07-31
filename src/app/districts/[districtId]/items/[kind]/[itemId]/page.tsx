@@ -63,7 +63,7 @@ export default async function ItemDetailPage({
   const supabase = await createClient();
   const [detail, availableDistricts, { data: trackedRow }] = await Promise.all([
     getItemDetail(effectiveRoot, kind as ItemKind, itemId),
-    getAvailableDistricts(),
+    getAvailableDistricts(ctx.membership.orgId),
     supabase
       .from("tracked_items")
       .select("item_id")

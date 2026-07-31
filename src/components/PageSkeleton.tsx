@@ -1,6 +1,6 @@
 export function PageSkeleton({ sidebar = false }: { sidebar?: boolean }) {
   return (
-    <div className="mx-auto w-full max-w-[1400px] animate-pulse px-6 py-6">
+    <div className="mx-auto w-full max-w-[1800px] animate-pulse px-6 py-6">
       <div className="mb-3 h-7 w-64 rounded-md bg-brand-100" />
       <div className="mb-6 h-4 w-96 rounded bg-brand-50" />
       <div className="flex items-start gap-5">

@@ -41,8 +41,10 @@ export type GeoFocus = {
   minPad?: number;
 };
 
-/* Fit bounds into a viewport that keeps the full map's aspect ratio. */
-function fitBounds(bounds: number[], pad = 0.25): [number, number, number, number] {
+/* Fit bounds into a viewport that keeps the full map's aspect ratio. The
+   default pad is tight so tall states like California and Texas actually
+   fill the frame when selected. */
+function fitBounds(bounds: number[], pad = 0.07): [number, number, number, number] {
   const [x0, y0, x1, y1] = bounds;
   const bw = (x1 - x0) * (1 + pad * 2);
   const bh = (y1 - y0) * (1 + pad * 2);
@@ -169,8 +171,12 @@ export function GeoMap({
   }, [vb, selectedStateAbbrs, primaryStateAbbr]);
 
   const hasCouncil = (councilDistricts?.length ?? 0) > 0;
-  const outlineDistricts = vb[2] < OUTLINE_VB && hasCouncil;
-  const showDistricts = vb[2] < DISTRICT_VB && hasCouncil;
+  // Council layers only apply with the camera actually over the city, so
+  // deep zoom anywhere else keeps county borders on screen.
+  const nearNyc =
+    vb[0] < 880 && vb[0] + vb[2] > 860 && vb[1] < 228 && vb[1] + vb[3] > 205;
+  const outlineDistricts = vb[2] < OUTLINE_VB && hasCouncil && nearNyc;
+  const showDistricts = vb[2] < DISTRICT_VB && hasCouncil && nearNyc;
 
   useEffect(() => {
     if (!zoomedState) return;
@@ -362,30 +368,39 @@ export function GeoMap({
     [subShapes, countyCounts]
   );
 
-  /* City labels, Apple Maps style: bigger cities appear first and smaller
-     ones surface as you zoom, greedily decluttered so labels never pile up.
-     US_CITIES is sorted by population descending. */
+  /* City labels, Apple Maps style: bigger cities surface first, smaller
+     ones appear as you zoom, each fades in near its population threshold,
+     and a width aware sweep guarantees labels never overlap. US_CITIES is
+     sorted by population descending, so higher priority names win space. */
+  const citySize = Math.min(Math.max(vb[2] / 38, 0.3), 15);
   const cityLabels = useMemo(() => {
-    if (vb[2] > 640) return [];
+    if (vb[2] > 640) return [] as { c: (typeof US_CITIES)[number]; opacity: number }[];
     const minPop = vb[2] * 1300;
-    const kept: typeof US_CITIES = [];
-    const dx = vb[2] * 0.085;
-    const dy = vb[2] * 0.032;
+    const kept: { c: (typeof US_CITIES)[number]; opacity: number; w: number }[] = [];
     for (const c of US_CITIES) {
-      if (c.pop < minPop) continue;
+      // Fade in over the last stretch before the threshold is crossed.
+      const opacity = Math.min(1, Math.max(0, (c.pop / minPop - 0.85) / 0.4));
+      if (opacity <= 0.02) continue;
       if (
         c.x < vb[0] - 5 || c.x > vb[0] + vb[2] + 5 ||
         c.y < vb[1] - 5 || c.y > vb[1] + vb[3] + 5
       )
         continue;
-      if (kept.some((k) => Math.abs(k.x - c.x) < dx && Math.abs(k.y - c.y) < dy))
+      // Approximate rendered label width in map units for overlap tests.
+      const w = (c.name.length + 3) * citySize * 0.6;
+      if (
+        kept.some(
+          (k) =>
+            Math.abs(k.c.x - c.x) < (k.w + w) / 2 &&
+            Math.abs(k.c.y - c.y) < citySize * 1.5
+        )
+      )
         continue;
-      kept.push(c);
-      if (kept.length >= 16) break;
+      kept.push({ c, opacity, w });
+      if (kept.length >= 18) break;
     }
-    return kept;
-  }, [vb]);
-  const citySize = Math.min(Math.max(vb[2] / 38, 0.3), 15);
+    return kept.map(({ c, opacity }) => ({ c, opacity }));
+  }, [vb, citySize]);
 
   return (
     <div>
@@ -485,9 +500,15 @@ export function GeoMap({
                           ? "var(--brand-400)"
                           : "var(--brand-200)"
                 }
-                fillOpacity={isSel ? 0.95 : 0.75}
-                stroke={isSel ? "var(--brand-900)" : "#5b5470"}
-                strokeWidth={isSel ? 2.5 : 1}
+                fillOpacity={isSel ? 0.95 : subLayer === "congressional" ? 0.6 : 0.75}
+                stroke={
+                  isSel
+                    ? "var(--brand-900)"
+                    : subLayer === "congressional"
+                      ? "#2f2a3d"
+                      : "#5b5470"
+                }
+                strokeWidth={isSel ? 2.5 : subLayer === "congressional" ? 1.7 : 1}
                 vectorEffect="non-scaling-stroke"
                 className="cursor-pointer hover:opacity-80"
                 onClick={(e) => {
@@ -557,9 +578,15 @@ export function GeoMap({
             </text>
           ))}
 
-        {/* City dots and names, on top of geography, never interactive */}
-        {cityLabels.map((c) => (
-          <g key={`${c.st}-${c.name}`} className="pointer-events-none select-none">
+        {/* City dots and names: fade with the zoom threshold, never overlap,
+            never interactive */}
+        {cityLabels.map(({ c, opacity }) => (
+          <g
+            key={`${c.st}-${c.name}`}
+            className="pointer-events-none select-none"
+            opacity={opacity}
+            style={{ transition: "opacity 250ms ease" }}
+          >
             <circle
               cx={c.x}
               cy={c.y}
