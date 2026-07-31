@@ -1,11 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { GeoMap } from "@/components/GeoMap";
-import {
-  Scorecard,
-  type OfficialSummary,
-} from "@/components/OfficialPicker";
+import type { OfficialSummary } from "@/components/OfficialPicker";
 
 export type DirectoryEntry = {
   id: string;
@@ -60,13 +58,19 @@ function PartyDot({ party }: { party: string }) {
   );
 }
 
-export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
+export function OfficialsDirectory({
+  entries,
+  districtId,
+}: {
+  entries: DirectoryEntry[];
+  districtId: string;
+}) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("all");
   const [party, setParty] = useState("all");
   const [regions, setRegions] = useState<string[]>([]);
   const [sort, setSort] = useState("name");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // A region matches an official either as their whole state or, for a
   // congressional district selection, as their exact seat. Selecting a
@@ -132,8 +136,6 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
     return counts;
   }, [entries]);
 
-  const selected = entries.find((e) => e.id === selectedId) ?? null;
-
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[460px_1fr]">
       <div>
@@ -151,55 +153,6 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
             legend="officials"
           />
         </div>
-        {selected && (
-          <div className="mt-6">
-            {selected.curated ? (
-              <Scorecard official={selected.curated} />
-            ) : (
-              <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-                <div className="mb-2 flex items-center gap-2">
-                  <PartyDot party={selected.party} />
-                  <div>
-                    <div className="text-base font-semibold text-brand-900">
-                      {selected.name}
-                    </div>
-                    <div className="text-sm text-muted">
-                      {selected.office} · {selected.state}
-                    </div>
-                  </div>
-                </div>
-                <div className="mb-3 text-xs text-muted">
-                  {selected.votesRecorded} roll call votes recorded
-                  {selected.lastVoteDate ? `, latest ${selected.lastVoteDate}` : ""}.
-                  Alignment scoring activates when rated bills map to their
-                  votes.
-                </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
-                      <th className="py-1.5 pr-2 font-medium">Date</th>
-                      <th className="py-1.5 pr-2 font-medium">Vote</th>
-                      <th className="py-1.5 font-medium">Cast</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selected.recentVotes.map((v, i) => (
-                      <tr key={i} className="border-b border-border last:border-0">
-                        <td className="whitespace-nowrap py-1.5 pr-2 text-xs">
-                          {v.vote_date}
-                        </td>
-                        <td className="max-w-[240px] truncate py-1.5 pr-2" title={v.bill_title ?? v.question ?? ""}>
-                          {v.bill_title || v.question}
-                        </td>
-                        <td className="py-1.5 text-xs">{v.vote_cast}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       <div>
@@ -286,12 +239,12 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
                 {filtered.map((e) => (
                   <tr
                     key={e.id}
-                    onClick={() => setSelectedId(e.id === selectedId ? null : e.id)}
-                    className={
-                      e.id === selectedId
-                        ? "cursor-pointer bg-brand-100/70"
-                        : "cursor-pointer hover:bg-brand-50/60"
+                    onClick={() =>
+                      router.push(
+                        `/districts/${districtId}/officials/${encodeURIComponent(e.id)}`
+                      )
                     }
+                    className="cursor-pointer hover:bg-brand-50/60"
                   >
                     <td className="border-b border-border px-4 py-2">
                       <div className="flex items-center gap-2">
@@ -320,7 +273,7 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
           </div>
         </div>
         <p className="mt-2 text-xs text-muted">
-          Click any row to open the scorecard. Senate and House rosters come
+          Click any row to open the official's full profile. Senate and House rosters come
           from live synced roll calls. State and local coverage currently
           includes officials tracked by Tally (New York City today) and grows
           with the consumer app.

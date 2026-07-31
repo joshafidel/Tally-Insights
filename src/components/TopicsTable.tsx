@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DistBar } from "@/components/DistBar";
 import { deltaColor } from "@/lib/format";
+import {
+  addTrackedItem,
+  removeTrackedItem,
+} from "@/app/districts/[districtId]/watchlist/actions";
 
 export type TopicRow = {
   id: string;
@@ -51,12 +55,16 @@ function fmtDate(iso: string | null) {
 export function TopicsTable({
   rows,
   districtId,
+  orgId,
+  canTrack = false,
   showAdded = true,
   showStatus = false,
   itemLabel = "Topic",
 }: {
   rows: TopicRow[];
   districtId: string;
+  orgId?: string;
+  canTrack?: boolean;
   showAdded?: boolean;
   showStatus?: boolean;
   itemLabel?: string;
@@ -229,6 +237,7 @@ export function TopicsTable({
                 30D{indicator("c30")}
               </button>
             </th>
+            {canTrack && <th className={th}>Track</th>}
           </tr>
         </thead>
         <tbody>
@@ -267,6 +276,32 @@ export function TopicsTable({
               </td>
               <td className="px-4 py-2.5 text-right tabular-nums"><DeltaCell v={r.change7} /></td>
               <td className="px-4 py-2.5 text-right tabular-nums"><DeltaCell v={r.change30} /></td>
+              {canTrack && (
+                <td className="px-4 py-2.5">
+                  <form action={r.tracked ? removeTrackedItem : addTrackedItem}>
+                    <input type="hidden" name="org_id" value={orgId} />
+                    <input type="hidden" name="district_id" value={districtId} />
+                    <input type="hidden" name="item" value={`${r.kind}:${r.id}`} />
+                    <input type="hidden" name="kind" value={r.kind} />
+                    <input type="hidden" name="item_id" value={r.id} />
+                    <button
+                      type="submit"
+                      className={
+                        r.tracked
+                          ? "rounded-md border border-brand-400 bg-brand-100 px-2 py-1 text-xs font-medium text-brand-800 hover:bg-brand-50"
+                          : "rounded-md border border-border bg-white px-2 py-1 text-xs text-muted hover:border-brand-400 hover:text-brand-800"
+                      }
+                      title={
+                        r.tracked
+                          ? "Untrack: remove from your dashboard and alert rules"
+                          : "Track: pin to your dashboard and enable alert rules"
+                      }
+                    >
+                      {r.tracked ? "Tracked ✓" : "Track"}
+                    </button>
+                  </form>
+                </td>
+              )}
             </tr>
           ))}
           {filtered.length === 0 && (

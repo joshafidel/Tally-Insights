@@ -217,7 +217,7 @@ export default async function OfficialsPage({
           vote records come from live synced roll calls.
         </p>
       </div>
-      <OfficialsDirectory entries={entries} />
+      <OfficialsDirectory entries={entries} districtId={districtId} />
     </AppShell>
   );
 }

@@ -92,14 +92,24 @@ export function FilterSidebar({
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(true);
   const [query, setQuery] = useState("");
+  // Optimistic region selection: the map and breadcrumb move instantly
+  // while the server render for the new audience streams in.
+  const [pendingRegions, setPendingRegions] = useState<string[] | null>(null);
   const [focus, setFocus] = useState<GeoFocus | null>(null);
   const [countyGeo, setCountyGeo] = useState<Record<string, { name: string; d: string }[]> | null>(null);
   const focusSeq = useRef(0);
 
   const f = parseAudience(Object.fromEntries(sp.entries()));
+  const regions = pendingRegions ?? f.districts;
+
+  // The URL committed: drop the optimistic overlay.
+  const spKey = sp.toString();
+  useEffect(() => {
+    setPendingRegions(null);
+  }, [spKey]);
 
   const apply = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(sp.toString());
@@ -113,7 +123,10 @@ export function FilterSidebar({
     });
   };
 
-  const setRegions = (list: string[]) => apply({ d: list.join(",") || null });
+  const setRegions = (list: string[]) => {
+    setPendingRegions(list);
+    apply({ d: list.join(",") || null });
+  };
 
   const toggleList = (key: "party" | "age" | "sex" | "race", value: string) => {
     const cur = new Set(f[key]);
@@ -237,14 +250,15 @@ export function FilterSidebar({
 
   // The dropdown lists the districts of the state the selection lives in.
   const dropdownState = useMemo(() => {
-    const p = f.districts[0];
+    const p = regions[0];
     if (!p) return null;
     return (
       districts.find((d) => d.district_id === p)?.state ??
       districts.find((d) => d.root_district === p)?.state ??
       null
     );
-  }, [f.districts, districts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regions.join(","), districts]);
 
   const stateDistricts = useMemo(() => {
     if (!dropdownState) return [];
@@ -254,7 +268,7 @@ export function FilterSidebar({
   }, [districts, dropdownState]);
 
   const dropdownValue =
-    f.districts.find((id) => stateDistricts.some((d) => d.district_id === id)) ?? "";
+    regions.find((id) => stateDistricts.some((d) => d.district_id === id)) ?? "";
 
   const activeCount =
     f.districts.length + f.party.length + f.age.length + f.sex.length + f.race.length;
@@ -280,6 +294,9 @@ export function FilterSidebar({
       <div className="flex items-center justify-between border-b border-border bg-brand-50 px-3 py-2">
         <span className="text-sm font-semibold text-brand-900">
           Filter the audience{activeCount > 0 ? ` (${activeCount})` : ""}
+          {isPending && (
+            <span className="ml-2 text-xs font-normal text-brand-600">updating…</span>
+          )}
         </span>
         <div className="flex items-center gap-2">
           {activeCount > 0 && (
@@ -331,7 +348,7 @@ export function FilterSidebar({
         </div>
         <GeoMap
           counts={stateCounts}
-          selectedRegions={f.districts}
+          selectedRegions={regions}
           onSelectRegions={setRegions}
           councilDistricts={districts
             .filter((d) => d.district_id.includes("-cc-"))

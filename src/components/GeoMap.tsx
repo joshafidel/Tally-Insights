@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { US_STATES } from "@/lib/usStatesGeo";
+import { US_CITIES } from "@/lib/usCities";
 import { districtLabel } from "@/lib/filters";
 
 /*
@@ -150,30 +151,21 @@ export function GeoMap({
   /* Which state's sub shapes to draw: the smallest state whose bounding
      box contains the view center, preferring a selected state. Smallest
      wins so Nevada is never mistaken for California's larger box. */
+  /* Subdivisions belong to the CLICKED state only. Scroll zooming over a
+     state never reveals its counties; the state must be selected, and a
+     selected state anywhere in view wins (clamping can push it off center,
+     and Nevada must never show California's counties). */
   const zoomedState = useMemo(() => {
     if (vb[2] > SUB_VB) return null;
     const inView = (b: number[]) =>
       !(b[2] < vb[0] || b[0] > vb[0] + vb[2] || b[3] < vb[1] || b[1] > vb[1] + vb[3]);
-    // A selected state anywhere in view wins: clamping can push it off
-    // center, and Nevada must never show California's counties.
-    const selectedInView = US_STATES.find(
-      (s) =>
-        (selectedStateAbbrs.has(s.abbr) || s.abbr === primaryStateAbbr) &&
-        inView(s.bounds)
+    return (
+      US_STATES.find(
+        (s) =>
+          (selectedStateAbbrs.has(s.abbr) || s.abbr === primaryStateAbbr) &&
+          inView(s.bounds)
+      )?.abbr ?? null
     );
-    if (selectedInView) return selectedInView.abbr;
-    const cx = vb[0] + vb[2] / 2;
-    const cy = vb[1] + vb[3] / 2;
-    const containing = US_STATES.filter((s) => {
-      const [x0, y0, x1, y1] = s.bounds;
-      return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
-    });
-    if (containing.length === 0) return null;
-    return containing.sort((a, b) => {
-      const area = (s: (typeof US_STATES)[number]) =>
-        (s.bounds[2] - s.bounds[0]) * (s.bounds[3] - s.bounds[1]);
-      return area(a) - area(b);
-    })[0].abbr;
   }, [vb, selectedStateAbbrs, primaryStateAbbr]);
 
   const hasCouncil = (councilDistricts?.length ?? 0) > 0;
@@ -370,6 +362,31 @@ export function GeoMap({
     [subShapes, countyCounts]
   );
 
+  /* City labels, Apple Maps style: bigger cities appear first and smaller
+     ones surface as you zoom, greedily decluttered so labels never pile up.
+     US_CITIES is sorted by population descending. */
+  const cityLabels = useMemo(() => {
+    if (vb[2] > 640) return [];
+    const minPop = vb[2] * 1300;
+    const kept: typeof US_CITIES = [];
+    const dx = vb[2] * 0.085;
+    const dy = vb[2] * 0.032;
+    for (const c of US_CITIES) {
+      if (c.pop < minPop) continue;
+      if (
+        c.x < vb[0] - 5 || c.x > vb[0] + vb[2] + 5 ||
+        c.y < vb[1] - 5 || c.y > vb[1] + vb[3] + 5
+      )
+        continue;
+      if (kept.some((k) => Math.abs(k.x - c.x) < dx && Math.abs(k.y - c.y) < dy))
+        continue;
+      kept.push(c);
+      if (kept.length >= 16) break;
+    }
+    return kept;
+  }, [vb]);
+  const citySize = Math.min(Math.max(vb[2] / 38, 0.3), 15);
+
   return (
     <div>
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
@@ -539,6 +556,33 @@ export function GeoMap({
               {String(c.num).padStart(2, "0")}
             </text>
           ))}
+
+        {/* City dots and names, on top of geography, never interactive */}
+        {cityLabels.map((c) => (
+          <g key={`${c.st}-${c.name}`} className="pointer-events-none select-none">
+            <circle
+              cx={c.x}
+              cy={c.y}
+              r={citySize / 4.5}
+              fill="#3f3a4d"
+              stroke="white"
+              strokeWidth={citySize / 14}
+            />
+            <text
+              x={c.x + citySize / 2.6}
+              y={c.y}
+              dominantBaseline="middle"
+              fontSize={citySize}
+              fontWeight={500}
+              fill="#3f3a4d"
+              stroke="white"
+              strokeWidth={citySize / 7}
+              paintOrder="stroke"
+            >
+              {c.name}
+            </text>
+          </g>
+        ))}
 
         {/* State abbreviations: halo + continuous rescale. Small states use
             leader lines at national zoom; once zoomed in, their labels render

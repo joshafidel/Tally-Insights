@@ -107,6 +107,8 @@ export default async function BillsPage({
             <TopicsTable
               rows={rows}
               districtId={districtId}
+              orgId={ctx.membership.orgId}
+              canTrack={ctx.membership.role !== "viewer"}
               showAdded={false}
               showStatus={true}
               itemLabel="Bill"

@@ -105,7 +105,12 @@ export default async function TopicsPage({
           </div>
 
           <div className="hidden md:block">
-            <TopicsTable rows={rows} districtId={districtId} />
+            <TopicsTable
+              rows={rows}
+              districtId={districtId}
+              orgId={ctx.membership.orgId}
+              canTrack={ctx.membership.role !== "viewer"}
+            />
           </div>
           <section className="space-y-3 md:hidden">
             {rows.slice(0, 30).map((r) => (
