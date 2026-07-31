@@ -6,7 +6,7 @@ import {
   getFilteredOverview,
   logAccess,
 } from "@/lib/insights";
-import { categoryLabel, districtLabel, parseAudience } from "@/lib/filters";
+import { categoryLabel, districtLabel, districtsLabel, parseAudience } from "@/lib/filters";
 import { AppShell } from "@/components/AppShell";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { SampleSize } from "@/components/Sample";
@@ -34,7 +34,7 @@ export default async function TopicsPage({
   ]);
   const topics = all.filter((i) => i.kind === "topic");
   await logAccess(ctx.membership.orgId, ctx.user.id, "view", "topics", {
-    district_id: audience.district ?? districtId,
+    district_id: audience.districts.join(",") || districtId,
   });
 
   const rows: TopicRow[] = topics.map((t) => ({
@@ -52,7 +52,9 @@ export default async function TopicsPage({
     tracked: t.tracked,
   }));
   const totalResponses = rows.reduce((a, r) => a + r.n, 0);
-  const scope = districtLabel(audience.district ?? districtId);
+  const scope = audience.districts.length
+    ? districtsLabel(audience.districts)
+    : districtLabel(districtId);
 
   return (
     <AppShell ctx={ctx} districtId={districtId} active="Topics">

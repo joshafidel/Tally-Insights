@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import type { AudienceFilters } from "@/lib/filters";
+import { isExactRegion, type AudienceFilters } from "@/lib/filters";
 
 export type ItemKind = "topic" | "bill" | "live_bill";
 
@@ -460,22 +460,6 @@ export async function getFilteredOverview(
   f: AudienceFilters
 ) {
   const supabase = await createClient();
-  const [catalog, { data: stats }, { data: tracked }] = await Promise.all([
-    getCatalog(),
-    supabase.rpc("insights_filtered_item_stats", {
-      p_district: f.district ?? defaultDistrict,
-      p_exact: f.exact,
-      p_party: f.party.length ? f.party : null,
-      p_age: f.age.length ? f.age : null,
-      p_sex: f.sex.length ? f.sex : null,
-      p_race: f.race.length ? f.race : null,
-    }),
-    supabase
-      .from("tracked_items")
-      .select("kind, item_id")
-      .eq("org_id", orgId),
-  ]);
-
   type Row = {
     kind: string;
     item_id: string;
@@ -486,7 +470,61 @@ export async function getFilteredOverview(
     avg_30d_ago: number | null;
     title: string | null;
   };
-  const rows = (stats ?? []) as Row[];
+  // One rpc call per selected region; disjoint regions merge by weighted
+  // mean so a cmd click multi selection reads as one audience.
+  const regions = f.districts.length ? f.districts : [defaultDistrict];
+  const demo = {
+    p_party: f.party.length ? f.party : null,
+    p_age: f.age.length ? f.age : null,
+    p_sex: f.sex.length ? f.sex : null,
+    p_race: f.race.length ? f.race : null,
+  };
+  const [catalog, statsPerRegion, { data: tracked }] = await Promise.all([
+    getCatalog(),
+    Promise.all(
+      regions.map((r) =>
+        supabase
+          .rpc("insights_filtered_item_stats", {
+            p_district: r,
+            p_exact: isExactRegion(r),
+            ...demo,
+          })
+          .then(({ data }) => (data ?? []) as Row[])
+      )
+    ),
+    supabase
+      .from("tracked_items")
+      .select("kind, item_id")
+      .eq("org_id", orgId),
+  ]);
+
+  const merged = new Map<string, Row>();
+  for (const rows0 of statsPerRegion) {
+    for (const r of rows0) {
+      const key = `${r.kind}:${r.item_id}`;
+      const prev = merged.get(key);
+      if (!prev) {
+        merged.set(key, { ...r, distribution: r.distribution ? [...r.distribution] : null });
+        continue;
+      }
+      const wsum = (a: number | null, an: number, b: number | null, bn: number) => {
+        const aw = a != null ? a * an : 0;
+        const bw = b != null ? b * bn : 0;
+        const div = (a != null ? an : 0) + (b != null ? bn : 0);
+        return div > 0 ? (aw + bw) / div : null;
+      };
+      prev.avg_value = wsum(prev.avg_value, prev.n, r.avg_value, r.n);
+      prev.avg_7d_ago = wsum(prev.avg_7d_ago, prev.n, r.avg_7d_ago, r.n);
+      prev.avg_30d_ago = wsum(prev.avg_30d_ago, prev.n, r.avg_30d_ago, r.n);
+      if (r.distribution) {
+        prev.distribution = (prev.distribution ?? [0, 0, 0, 0, 0]).map(
+          (v, i) => v + (r.distribution?.[i] ?? 0)
+        );
+      }
+      prev.n += r.n;
+    }
+  }
+  const rows = [...merged.values()];
   const catalogKeys = new Set(catalog.map((c) => `${c.kind}:${c.id}`));
   for (const s of rows) {
     const key = `${s.kind}:${s.item_id}`;
@@ -518,7 +556,7 @@ export async function getFilteredOverview(
         ? {
             kind: s.kind,
             item_id: s.item_id,
-            district_id: f.district ?? defaultDistrict,
+            district_id: regions.join(","),
             n: s.n,
             avg_value: s.avg_value,
             distribution: s.distribution,

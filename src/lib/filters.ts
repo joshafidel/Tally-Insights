@@ -1,11 +1,17 @@
 export type AudienceFilters = {
-  district: string | null;
-  exact: boolean;
+  /* Region ids: 'tx' (state root), 'nyc', 'us', 'tx-co-harris' (county),
+     'nyc-cc-8' (council), 'pa-cd-12' (congressional). Sub district ids are
+     self describing, so no separate exact flag travels with them. */
+  districts: string[];
   party: string[];
   age: string[];
   sex: string[];
   race: string[];
 };
+
+export function isExactRegion(id: string): boolean {
+  return id.includes("-co-") || id.includes("-cc-") || id.includes("-cd-");
+}
 
 export const PARTY_OPTIONS = [
   { key: "D", label: "Dem" },
@@ -60,6 +66,10 @@ export function districtLabel(id: string): string {
   if (id === "nyc") return "New York City";
   if (id === "us") return "United States";
   if (id.includes("-cc-")) return `Council District ${id.split("-cc-")[1]}`;
+  if (id.includes("-cd-")) {
+    const [st, , num] = id.split("-");
+    return `${st.toUpperCase()}-${num === "0" ? "AL" : num}`;
+  }
   const county = id.match(/^([a-z]{2})-co-(.+)$/);
   if (county) {
     const name = county[2]
@@ -81,8 +91,7 @@ export function parseAudience(sp: {
 }): AudienceFilters {
   const list = (v?: string) => (v ? v.split(",").filter(Boolean) : []);
   return {
-    district: sp.d || null,
-    exact: sp.exact === "1",
+    districts: list(sp.d),
     party: list(sp.party),
     age: list(sp.age),
     sex: list(sp.sex),
@@ -90,9 +99,13 @@ export function parseAudience(sp: {
   };
 }
 
+export function districtsLabel(ids: string[]): string {
+  return ids.map(districtLabel).join(" + ");
+}
+
 export function hasAudienceFilters(f: AudienceFilters): boolean {
   return Boolean(
-    f.district ||
+    f.districts.length ||
       f.party.length ||
       f.age.length ||
       f.sex.length ||

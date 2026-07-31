@@ -94,26 +94,10 @@ export function FilterSidebar({
   const sp = useSearchParams();
   const [, startTransition] = useTransition();
   const [open, setOpen] = useState(true);
-  const [zoomState, setZoomState] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [focus, setFocus] = useState<GeoFocus | null>(null);
   const [countyGeo, setCountyGeo] = useState<Record<string, { name: string; d: string }[]> | null>(null);
   const focusSeq = useRef(0);
-
-  const rootOfState = (abbr: string) => {
-    const roots = districts.filter(
-      (d) => d.state === abbr && d.district_id === d.root_district
-    );
-    if (roots.length === 0) return null;
-    return roots.sort((a, b) => b.n - a.n)[0].district_id;
-  };
-
-  const f0 = parseAudience(Object.fromEntries(sp.entries()));
-  const selectedStateFromFilter = f0.district
-    ? (districts.find((d) => d.district_id === f0.district)?.state ??
-       districts.find((d) => d.root_district === f0.district)?.state ??
-       null)
-    : null;
 
   const f = parseAudience(Object.fromEntries(sp.entries()));
 
@@ -123,16 +107,27 @@ export function FilterSidebar({
       if (v == null || v === "") next.delete(k);
       else next.set(k, v);
     }
+    next.delete("exact");
     startTransition(() => {
       router.replace(`${pathname}?${next.toString()}`, { scroll: false });
     });
   };
+
+  const setRegions = (list: string[]) => apply({ d: list.join(",") || null });
 
   const toggleList = (key: "party" | "age" | "sex" | "race", value: string) => {
     const cur = new Set(f[key]);
     if (cur.has(value)) cur.delete(value);
     else cur.add(value);
     apply({ [key]: [...cur].join(",") || null });
+  };
+
+  const rootOfState = (abbr: string) => {
+    const roots = districts.filter(
+      (d) => d.state === abbr && d.district_id === d.root_district
+    );
+    if (roots.length === 0) return null;
+    return roots.sort((a, b) => b.n - a.n)[0].district_id;
   };
 
   // County names load lazily the first time a search needs them.
@@ -142,41 +137,38 @@ export function FilterSidebar({
     }
   }, [query, countyGeo]);
 
-  const focusOn = (bounds: [number, number, number, number], pad?: number, minPad?: number) =>
-    setFocus({ key: `f${++focusSeq.current}`, bounds, pad, minPad });
+  const focusOn = (bounds: [number, number, number, number], pad?: number) =>
+    setFocus({ key: `f${++focusSeq.current}`, bounds, pad });
 
   const pickState = (abbr: string) => {
     setQuery("");
-    setZoomState(abbr);
     const st = US_STATES.find((s) => s.abbr === abbr);
     if (st) focusOn(st.bounds as [number, number, number, number]);
     const root = rootOfState(abbr);
-    if (root) apply({ d: root, exact: null });
+    setRegions(root ? [root] : [abbr.toLowerCase()]);
   };
   const pickUS = () => {
     setQuery("");
-    setZoomState(null);
-    focusOn([30, 15, 945, 595], 0.01, 1);
-    apply({ d: "us", exact: null });
+    focusOn([0, 0, 975, 610], 0.01);
+    setRegions(["us"]);
   };
   const pickNYC = () => {
     setQuery("");
-    setZoomState("NY");
-    focusOn(NYC_BOUNDS, 0.15, 1);
-    apply({ d: "nyc", exact: null });
+    focusOn(NYC_BOUNDS, 0.15);
+    setRegions(["nyc"]);
   };
   const pickCouncil = (id: string) => {
     setQuery("");
-    setZoomState("NY");
-    focusOn(NYC_BOUNDS, 0.15, 1);
-    apply({ d: id, exact: "1" });
+    focusOn(NYC_BOUNDS, 0.15);
+    setRegions([id]);
   };
   const pickCounty = (st: string, county: { name: string; d: string }) => {
     setQuery("");
-    setZoomState(st);
-    focusOn(pathBounds(county.d), 0.5, 2);
+    // Counties select in place: zoom to the state, not the county.
+    const stGeo = US_STATES.find((s) => s.abbr === st);
+    focusOn(stGeo ? (stGeo.bounds as [number, number, number, number]) : pathBounds(county.d));
     const slug = county.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    apply({ d: `${st.toLowerCase()}-co-${slug}`, exact: "1" });
+    setRegions([`${st.toLowerCase()}-co-${slug}`]);
   };
 
   const results: SearchResult[] = useMemo(() => {
@@ -235,13 +227,6 @@ export function FilterSidebar({
     return counts;
   }, [districts]);
 
-  const stateDistricts = useMemo(() => {
-    if (!zoomState) return [];
-    return districts
-      .filter((d) => d.state === zoomState)
-      .sort((a, b) => b.n - a.n);
-  }, [districts, zoomState]);
-
   const countyCounts = useMemo(() => {
     const m: Record<string, number> = {};
     for (const d of districts) {
@@ -250,8 +235,29 @@ export function FilterSidebar({
     return m;
   }, [districts]);
 
+  // The dropdown lists the districts of the state the selection lives in.
+  const dropdownState = useMemo(() => {
+    const p = f.districts[0];
+    if (!p) return null;
+    return (
+      districts.find((d) => d.district_id === p)?.state ??
+      districts.find((d) => d.root_district === p)?.state ??
+      null
+    );
+  }, [f.districts, districts]);
+
+  const stateDistricts = useMemo(() => {
+    if (!dropdownState) return [];
+    return districts
+      .filter((d) => d.state === dropdownState)
+      .sort((a, b) => b.n - a.n);
+  }, [districts, dropdownState]);
+
+  const dropdownValue =
+    f.districts.find((id) => stateDistricts.some((d) => d.district_id === id)) ?? "";
+
   const activeCount =
-    (f.district ? 1 : 0) + f.party.length + f.age.length + f.sex.length + f.race.length;
+    f.districts.length + f.party.length + f.age.length + f.sex.length + f.race.length;
 
   if (!open) {
     return (
@@ -280,8 +286,7 @@ export function FilterSidebar({
             <button
               type="button"
               onClick={() => {
-                setZoomState(null);
-                apply({ d: null, exact: null, party: null, age: null, sex: null, race: null });
+                apply({ d: null, party: null, age: null, sex: null, race: null });
               }}
               className="text-xs text-brand-700 hover:underline"
             >
@@ -326,64 +331,39 @@ export function FilterSidebar({
         </div>
         <GeoMap
           counts={stateCounts}
-          selectedState={selectedStateFromFilter}
-          onSelectState={(s) => {
-            setZoomState(s);
-            if (!s) apply({ d: null, exact: null });
-            else {
-              const root = rootOfState(s);
-              if (root) apply({ d: root, exact: null });
-            }
-          }}
+          selectedRegions={f.districts}
+          onSelectRegions={setRegions}
           councilDistricts={districts
             .filter((d) => d.district_id.includes("-cc-"))
             .map((d) => ({ id: d.district_id, label: d.district_id, n: d.n }))}
           countyCounts={countyCounts}
-          selectedDistrict={f.exact ? f.district : null}
-          onSelectDistrict={(id) =>
-            id ? apply({ d: id, exact: "1" }) : apply({ d: null, exact: null })
-          }
           focus={focus}
           height={380}
         />
-        {zoomState && (
+        {dropdownState && stateDistricts.length > 1 && (
           <div className="mt-2">
-            <div className="mb-1 text-xs text-muted">
-              Districts in {zoomState} (click to zoom in):
-            </div>
+            <label className="flex items-center gap-2 text-xs text-muted">
+              Districts in {dropdownState}:
+              <select
+                value={dropdownValue}
+                onChange={(e) => {
+                  if (e.target.value) setRegions([e.target.value]);
+                }}
+                className="min-w-0 flex-1 rounded-md border border-border bg-white px-2 py-1.5 text-sm text-foreground"
+              >
+                <option value="">Choose a district or county...</option>
+                {stateDistricts.map((d) => (
+                  <option key={d.district_id} value={d.district_id}>
+                    {districtLabel(d.district_id)} ({d.n.toLocaleString("en-US")})
+                  </option>
+                ))}
+              </select>
+            </label>
             {!hasExactFeature && (
-              <div className="mb-1 text-xs text-muted">
+              <div className="mt-1 text-xs text-muted">
                 Exact district filtering is a premium dimension.
               </div>
             )}
-            <div className="flex flex-wrap gap-1.5">
-              {stateDistricts.slice(0, 12).map((d) => {
-                const exact = d.district_id !== d.root_district;
-                return (
-                  <Chip
-                    key={d.district_id}
-                    active={f.district === d.district_id && f.exact === exact}
-                    onClick={() =>
-                      apply({ d: d.district_id, exact: exact ? "1" : null })
-                    }
-                  >
-                    {districtLabel(d.district_id)}{" "}
-                    <span className="opacity-70">
-                      {d.n.toLocaleString("en-US")}
-                    </span>
-                  </Chip>
-                );
-              })}
-              {stateDistricts.length > 12 && (
-                <span className="self-center text-xs text-muted">
-                  and {stateDistricts.length - 12} more: double click the map or
-                  search above
-                </span>
-              )}
-              {stateDistricts.length === 0 && (
-                <span className="text-xs text-muted">No responses in this state yet.</span>
-              )}
-            </div>
           </div>
         )}
       </Section>

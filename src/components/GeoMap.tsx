@@ -1,32 +1,35 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { US_STATES } from "@/lib/usStatesGeo";
+import { districtLabel } from "@/lib/filters";
 
 /*
   Election night style map, shared by topics, bills, items, and officials.
-    Scroll wheel zooms toward the cursor (registered non passive so the page
-    never scrolls instead), drag pans.
-    State abbreviations render with a white halo and rescale continuously
-    with zoom so they stay legible at every level.
-    Single click selects and highlights a state and filters results to it.
-    Sub districts (the real 51 NYC council boundaries) appear only past a
-    zoom threshold and require a DOUBLE click to select, so a state can
-    never be mis picked as a district. Selected shapes get a bold outline.
-    Counties fade in when zoomed into a state, for geographic context.
+    A breadcrumb above the map (United States > State > County) jumps
+    between zoom levels. One click selects a state and glides the camera
+    to it; with counties (or congressional districts) showing, one click
+    selects that shape without zooming further. Holding cmd or ctrl
+    toggles shapes into a multi selection. The viewport is clamped so the
+    country never leaves view and cannot zoom out past full frame, and
+    every programmatic move is an eased animation, not a cut.
 */
 
 const FULL: [number, number, number, number] = [0, 0, 975, 610];
+const RATIO = FULL[3] / FULL[2];
 const SMALL_STATES = new Set(["CT", "RI", "DE", "NJ", "MD", "MA", "NH", "VT", "DC"]);
-const COUNTY_VB = 520; // show counties once a state fills the view
-const OUTLINE_VB = 170; // sub district boundaries become visible below this
-const DISTRICT_VB = 45; // sub districts become interactive below this
+// Tall states (CA, TX) fit at ~800 wide in the 975x610 frame, so the sub
+// layer threshold must sit above every state's fitted view width.
+const SUB_VB = 830;
+const OUTLINE_VB = 170; // council boundaries become visible below this
+const DISTRICT_VB = 45; // council districts become interactive below this
 
 function countySlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 type CountyShape = { name: string; d: string };
+type CdShape = { num: string; d: string };
 type CouncilShape = { num: number; d: string; centroid: number[] };
 
 export type GeoDistrictOption = { id: string; label: string; n: number };
@@ -37,36 +40,84 @@ export type GeoFocus = {
   minPad?: number;
 };
 
+/* Fit bounds into a viewport that keeps the full map's aspect ratio. */
+function fitBounds(bounds: number[], pad = 0.25): [number, number, number, number] {
+  const [x0, y0, x1, y1] = bounds;
+  const bw = (x1 - x0) * (1 + pad * 2);
+  const bh = (y1 - y0) * (1 + pad * 2);
+  const w = Math.min(Math.max(bw, bh / RATIO, 6), FULL[2]);
+  const h = w * RATIO;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  return clampVb([cx - w / 2, cy - h / 2, w, h]);
+}
+
+/* America never leaves the frame and full frame is the max zoom out. */
+function clampVb([x, y, w]: number[]): [number, number, number, number] {
+  const cw = Math.min(w, FULL[2]);
+  const ch = cw * RATIO;
+  const cx = Math.min(Math.max(x, 0), FULL[2] - cw);
+  const cy = Math.min(Math.max(y, 0), FULL[3] - ch);
+  return [cx, cy, cw, ch];
+}
+
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
 export function GeoMap({
   counts,
-  selectedState,
-  onSelectState,
+  selectedRegions,
+  onSelectRegions,
   councilDistricts,
   countyCounts,
-  selectedDistrict,
-  onSelectDistrict,
+  subLayer = "counties",
   focus,
   height = 340,
   legend = "responses",
 }: {
   counts: Record<string, number>;
-  selectedState: string | null;
-  onSelectState: (s: string | null) => void;
+  selectedRegions: string[];
+  onSelectRegions: (next: string[]) => void;
   councilDistricts?: GeoDistrictOption[];
   countyCounts?: Record<string, number>;
-  selectedDistrict?: string | null;
-  onSelectDistrict?: (id: string | null) => void;
+  subLayer?: "counties" | "congressional";
   focus?: GeoFocus | null;
   height?: number;
   legend?: string;
 }) {
   const [vb, setVb] = useState<[number, number, number, number]>(FULL);
   const [counties, setCounties] = useState<Record<string, CountyShape[]> | null>(null);
+  const [cds, setCds] = useState<Record<string, CdShape[]> | null>(null);
   const [council, setCouncil] = useState<CouncilShape[] | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const vbRef = useRef(vb);
   vbRef.current = vb;
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const anim = useRef<number | null>(null);
+
+  const animateTo = useCallback((target: [number, number, number, number]) => {
+    if (anim.current) cancelAnimationFrame(anim.current);
+    const from = vbRef.current;
+    const to = clampVb(target);
+    const start = performance.now();
+    const DURATION = 650;
+    const step = (now: number) => {
+      const t = Math.min((now - start) / DURATION, 1);
+      const k = easeInOut(t);
+      const w = from[2] + (to[2] - from[2]) * k;
+      setVb([
+        from[0] + (to[0] - from[0]) * k,
+        from[1] + (to[1] - from[1]) * k,
+        w,
+        w * RATIO,
+      ]);
+      if (t < 1) anim.current = requestAnimationFrame(step);
+      else anim.current = null;
+    };
+    anim.current = requestAnimationFrame(step);
+  }, []);
+  useEffect(() => () => {
+    if (anim.current) cancelAnimationFrame(anim.current);
+  }, []);
 
   const max = Math.max(1, ...Object.values(counts));
   const fill = (abbr: string) => {
@@ -79,38 +130,74 @@ export function GeoMap({
     return "var(--brand-300)";
   };
 
+  const selected = useMemo(() => new Set(selectedRegions), [selectedRegions]);
+  const selectedStateAbbrs = useMemo(
+    () =>
+      new Set(
+        selectedRegions
+          .filter((r) => /^[a-z]{2}$/.test(r) && r !== "us")
+          .map((r) => r.toUpperCase())
+      ),
+    [selectedRegions]
+  );
+  const primary = selectedRegions[0] ?? null;
+  const primaryStateAbbr = primary
+    ? primary === "nyc"
+      ? "NY"
+      : primary.slice(0, 2).toUpperCase()
+    : null;
+
+  /* Which state's sub shapes to draw: the smallest state whose bounding
+     box contains the view center, preferring a selected state. Smallest
+     wins so Nevada is never mistaken for California's larger box. */
   const zoomedState = useMemo(() => {
-    if (vb[2] > COUNTY_VB) return null;
+    if (vb[2] > SUB_VB) return null;
+    const inView = (b: number[]) =>
+      !(b[2] < vb[0] || b[0] > vb[0] + vb[2] || b[3] < vb[1] || b[1] > vb[1] + vb[3]);
+    // A selected state anywhere in view wins: clamping can push it off
+    // center, and Nevada must never show California's counties.
+    const selectedInView = US_STATES.find(
+      (s) =>
+        (selectedStateAbbrs.has(s.abbr) || s.abbr === primaryStateAbbr) &&
+        inView(s.bounds)
+    );
+    if (selectedInView) return selectedInView.abbr;
     const cx = vb[0] + vb[2] / 2;
     const cy = vb[1] + vb[3] / 2;
-    return (
-      US_STATES.find((s) => {
-        const [x0, y0, x1, y1] = s.bounds;
-        return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
-      })?.abbr ?? null
-    );
-  }, [vb]);
+    const containing = US_STATES.filter((s) => {
+      const [x0, y0, x1, y1] = s.bounds;
+      return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
+    });
+    if (containing.length === 0) return null;
+    return containing.sort((a, b) => {
+      const area = (s: (typeof US_STATES)[number]) =>
+        (s.bounds[2] - s.bounds[0]) * (s.bounds[3] - s.bounds[1]);
+      return area(a) - area(b);
+    })[0].abbr;
+  }, [vb, selectedStateAbbrs, primaryStateAbbr]);
 
   const hasCouncil = (councilDistricts?.length ?? 0) > 0;
-  // One continuous map: district boundaries fade in while zooming toward the
-  // city, then become clickable at close zoom. Never a separate view.
   const outlineDistricts = vb[2] < OUTLINE_VB && hasCouncil;
   const showDistricts = vb[2] < DISTRICT_VB && hasCouncil;
 
   useEffect(() => {
-    if (zoomedState && !counties) {
+    if (!zoomedState) return;
+    if (subLayer === "counties" && !counties) {
       fetch("/us-counties.json").then((r) => r.json()).then(setCounties).catch(() => {});
     }
-  }, [zoomedState, counties]);
+    if (subLayer === "congressional" && !cds) {
+      fetch("/us-cd.json").then((r) => r.json()).then(setCds).catch(() => {});
+    }
+  }, [zoomedState, counties, cds, subLayer]);
   useEffect(() => {
     if (
-      (vb[2] < OUTLINE_VB * 2 || selectedDistrict?.startsWith("nyc-cc-")) &&
+      (vb[2] < OUTLINE_VB * 2 || selectedRegions.some((r) => r.includes("-cc-"))) &&
       !council &&
       hasCouncil
     ) {
       fetch("/nyc-council.json").then((r) => r.json()).then(setCouncil).catch(() => {});
     }
-  }, [vb, council, hasCouncil, selectedDistrict]);
+  }, [vb, council, hasCouncil, selectedRegions]);
 
   // Non passive wheel listener: React's synthetic onWheel cannot
   // preventDefault, which is why the page scrolled instead of zooming.
@@ -119,27 +206,24 @@ export function GeoMap({
     if (!svg) return;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
+      if (anim.current) {
+        cancelAnimationFrame(anim.current);
+        anim.current = null;
+      }
       const rect = svg.getBoundingClientRect();
       const px = (e.clientX - rect.left) / rect.width;
       const py = (e.clientY - rect.top) / rect.height;
       const factor = e.deltaY > 0 ? 1.18 : 0.85;
       const [x, y, w, h] = vbRef.current;
-      const nw = Math.min(Math.max(w * factor, 1.5), 1100);
-      const nh = nw * (h / w);
+      const nw = Math.min(Math.max(w * factor, 1.5), FULL[2]);
+      const nh = nw * RATIO;
       const cx = x + w * px;
       const cy = y + h * py;
-      setVb([cx - nw * px, cy - nh * py, nw, nh]);
+      setVb(clampVb([cx - nw * px, cy - nh * py, nw, nh]));
     };
     svg.addEventListener("wheel", handler, { passive: false });
     return () => svg.removeEventListener("wheel", handler);
   }, []);
-
-  const zoomTo = (bounds: number[], pad = 0.3, minPad = 8) => {
-    const [x0, y0, x1, y1] = bounds;
-    const padX = Math.max((x1 - x0) * pad, minPad);
-    const padY = Math.max((y1 - y0) * pad, minPad);
-    setVb([x0 - padX, y0 - padY, x1 - x0 + padX * 2, y1 - y0 + padY * 2]);
-  };
 
   // Search results and other outside controls hand the map a focus target.
   const focusKey = useRef<string | null>(null);
@@ -150,58 +234,43 @@ export function GeoMap({
     }
     if (focusKey.current === focus.key) return;
     focusKey.current = focus.key;
-    zoomTo(focus.bounds, focus.pad ?? 0.3, focus.minPad ?? 8);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus]);
+    animateTo(fitBounds(focus.bounds, focus.pad ?? 0.25));
+  }, [focus, animateTo]);
 
-  // When a region is selected from outside the map (URL filter, chips),
-  // carry the map with it so districts are the same map zoomed in.
-  const autoState = useRef<string | null>(null);
+  // Arriving with a selection in the URL carries the camera to it.
+  const autoKey = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedState) {
-      autoState.current = null;
+    if (!primary) {
+      autoKey.current = null;
       return;
     }
-    if (autoState.current === selectedState) return;
-    autoState.current = selectedState;
-    if (vbRef.current[2] >= FULL[2] * 0.9) {
-      const st = US_STATES.find((s) => s.abbr === selectedState);
-      if (st) zoomTo(st.bounds);
-    }
+    if (autoKey.current === primary) return;
+    autoKey.current = primary;
+    if (vbRef.current[2] < FULL[2] * 0.9) return;
+    if (primary.includes("-cc-")) return; // council effect below handles the city
+    const st = US_STATES.find((s) => s.abbr === primaryStateAbbr);
+    if (st) animateTo(fitBounds(st.bounds));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedState]);
+  }, [primary]);
 
-  const autoDistrict = useRef<string | null>(null);
+  const autoCouncil = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedDistrict) {
-      autoDistrict.current = null;
+    const cc = selectedRegions.find((r) => r.includes("-cc-"));
+    if (!cc) {
+      autoCouncil.current = null;
       return;
     }
-    if (autoDistrict.current === selectedDistrict) return;
-    // A selected county zooms the map to its state so the county layer shows.
-    if (selectedDistrict.includes("-co-")) {
-      autoDistrict.current = selectedDistrict;
-      if (vbRef.current[2] >= COUNTY_VB) {
-        const st = US_STATES.find(
-          (s) => s.abbr === selectedDistrict.slice(0, 2).toUpperCase()
-        );
-        if (st) zoomTo(st.bounds);
-      }
-      return;
-    }
-    if (!council) return;
-    autoDistrict.current = selectedDistrict;
+    if (!council || autoCouncil.current === cc) return;
+    autoCouncil.current = cc;
     if (vbRef.current[2] >= DISTRICT_VB) {
       const xs = council.map((c) => c.centroid[0]);
       const ys = council.map((c) => c.centroid[1]);
-      zoomTo(
-        [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
-        0.25,
-        1
+      animateTo(
+        fitBounds([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], 0.2)
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDistrict, council]);
+  }, [selectedRegions, council]);
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     drag.current = { x: e.clientX, y: e.clientY, moved: false };
@@ -216,11 +285,33 @@ export function GeoMap({
     }
     drag.current.x = e.clientX;
     drag.current.y = e.clientY;
-    setVb(([x, y, w, h]) => [x - dx, y - dy, w, h]);
+    setVb(([x, y, w, h]) => clampVb([x - dx, y - dy, w, h]));
   };
   const wasDrag = () => Boolean(drag.current?.moved);
   const onPointerUp = () => {
     setTimeout(() => (drag.current = null), 0);
+  };
+
+  const toggleRegion = (id: string, additive: boolean) => {
+    if (additive) {
+      const next = new Set(selectedRegions);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      onSelectRegions([...next]);
+    } else {
+      onSelectRegions(selected.has(id) && selectedRegions.length === 1 ? [] : [id]);
+    }
+  };
+
+  const clickState = (abbr: string, e: React.MouseEvent) => {
+    if (wasDrag()) return;
+    const id = abbr.toLowerCase();
+    const additive = e.metaKey || e.ctrlKey;
+    toggleRegion(id, additive);
+    if (!additive) {
+      const st = US_STATES.find((s) => s.abbr === abbr)!;
+      animateTo(fitBounds(st.bounds));
+    }
   };
 
   // Labels rescale continuously with zoom and carry a white halo.
@@ -245,36 +336,81 @@ export function GeoMap({
   }, [councilDistricts]);
   const councilMax = Math.max(1, ...[...councilCounts.values()]);
 
-  const clickState = (abbr: string) => {
-    if (wasDrag()) return;
-    const st = US_STATES.find((s) => s.abbr === abbr)!;
-    if (selectedState === abbr) {
-      onSelectState(null);
-    } else {
-      onSelectState(abbr);
-      zoomTo(st.bounds);
+  /* Breadcrumb: United States > State > County or district */
+  const crumbState = primaryStateAbbr
+    ? US_STATES.find((s) => s.abbr === primaryStateAbbr) ?? null
+    : null;
+  const crumbSub =
+    primary && (primary.includes("-co-") || primary.includes("-cc-") || primary.includes("-cd-") || primary === "nyc")
+      ? primary
+      : null;
+  const crumbBtn =
+    "rounded border border-border bg-white px-2 py-0.5 text-brand-800 hover:bg-brand-50";
+
+  const subShapes: { id: string; d: string; name: string }[] = useMemo(() => {
+    if (!zoomedState) return [];
+    const stLower = zoomedState.toLowerCase();
+    if (subLayer === "congressional") {
+      return (cds?.[zoomedState] ?? []).map((c) => ({
+        id: `${stLower}-cd-${c.num}`,
+        d: c.d,
+        name: `${zoomedState}-${c.num}`,
+      }));
     }
-  };
+    return (counties?.[zoomedState] ?? []).map((c) => ({
+      id: `${stLower}-co-${countySlug(c.name)}`,
+      d: c.d,
+      name: `${c.name} County`,
+    }));
+  }, [zoomedState, subLayer, cds, counties]);
+
+  const subMax = useMemo(
+    () =>
+      Math.max(1, ...subShapes.map((s) => countyCounts?.[s.id] ?? 0)),
+    [subShapes, countyCounts]
+  );
 
   return (
     <div>
-      <div className="mb-1.5 flex items-center gap-2 text-xs">
-        {vb !== FULL && (
-          <button
-            type="button"
-            className="rounded border border-border bg-white px-2 py-0.5 text-muted hover:bg-brand-50"
-            onClick={() => setVb(FULL)}
-          >
-            Reset zoom
-          </button>
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+        <button
+          type="button"
+          className={crumbBtn}
+          onClick={() => {
+            onSelectRegions([]);
+            animateTo(FULL);
+          }}
+        >
+          United States
+        </button>
+        {crumbState && (
+          <>
+            <span className="text-muted">›</span>
+            <button
+              type="button"
+              className={crumbBtn}
+              onClick={() => {
+                onSelectRegions([crumbState.abbr.toLowerCase()]);
+                animateTo(fitBounds(crumbState.bounds));
+              }}
+            >
+              {crumbState.name}
+            </button>
+          </>
+        )}
+        {crumbSub && (
+          <>
+            <span className="text-muted">›</span>
+            <span className="rounded bg-brand-600 px-2 py-0.5 font-medium text-white">
+              {districtLabel(crumbSub)}
+            </span>
+          </>
+        )}
+        {selectedRegions.length > 1 && (
+          <span className="text-muted">+{selectedRegions.length - 1} more</span>
         )}
         <span className="ml-auto text-muted">
-          scroll to zoom, drag to pan
-          {showDistricts
-            ? ", double click a district to select it"
-            : zoomedState
-              ? ", double click a county to select it"
-              : ""}
+          click to select, cmd click for multiple, scroll to zoom
         </span>
       </div>
 
@@ -289,79 +425,71 @@ export function GeoMap({
         role="img"
         aria-label="United States map"
       >
-        {US_STATES.map((s) => (
-          <path
-            key={s.abbr}
-            d={s.d}
-            fill={fill(s.abbr)}
-            fillOpacity={selectedState && selectedState !== s.abbr ? 0.45 : 1}
-            stroke={selectedState === s.abbr ? "var(--brand-900)" : "#5b5470"}
-            strokeWidth={selectedState === s.abbr ? 2.5 : 1}
-            vectorEffect="non-scaling-stroke"
-            className="cursor-pointer transition-opacity hover:opacity-85"
-            pointerEvents={showDistricts ? "none" : "auto"}
-            onClick={() => clickState(s.abbr)}
-          >
-            <title>{`${s.name}: ${(counts[s.abbr] ?? 0).toLocaleString("en-US")} ${legend}`}</title>
-          </path>
-        ))}
+        {US_STATES.map((s) => {
+          const isSel = selectedStateAbbrs.has(s.abbr);
+          return (
+            <path
+              key={s.abbr}
+              d={s.d}
+              fill={fill(s.abbr)}
+              fillOpacity={selectedRegions.length > 0 && !isSel ? 0.45 : 1}
+              stroke={isSel ? "var(--brand-900)" : "#5b5470"}
+              strokeWidth={isSel ? 2.5 : 1}
+              vectorEffect="non-scaling-stroke"
+              className="cursor-pointer transition-opacity hover:opacity-85"
+              pointerEvents={showDistricts ? "none" : "auto"}
+              onClick={(e) => clickState(s.abbr, e)}
+            >
+              <title>{`${s.name}: ${(counts[s.abbr] ?? 0).toLocaleString("en-US")} ${legend}`}</title>
+            </path>
+          );
+        })}
 
-        {/* Counties surface on top of the focused state, shaded by response
-            volume; double click selects one as the audience filter */}
+        {/* Counties or congressional districts on top of the focused state,
+            shaded by volume; one click selects, cmd click multi selects */}
         {zoomedState && !showDistricts &&
-          (() => {
-            const list = counties?.[zoomedState] ?? [];
-            const stLower = zoomedState.toLowerCase();
-            const ns = list.map(
-              (c) => countyCounts?.[`${stLower}-co-${countySlug(c.name)}`] ?? 0
+          subShapes.map((c) => {
+            const n = countyCounts?.[c.id] ?? 0;
+            const isSel = selected.has(c.id);
+            // Log scale: one giant county must not wash out all the others
+            const t = n === 0 ? 0 : Math.log(1 + n) / Math.log(1 + subMax);
+            return (
+              <path
+                key={c.id}
+                d={c.d}
+                fill={
+                  isSel
+                    ? "var(--brand-800)"
+                    : n === 0
+                      ? "white"
+                      : t > 0.6
+                        ? "var(--brand-600)"
+                        : t > 0.25
+                          ? "var(--brand-400)"
+                          : "var(--brand-200)"
+                }
+                fillOpacity={isSel ? 0.95 : 0.75}
+                stroke={isSel ? "var(--brand-900)" : "#5b5470"}
+                strokeWidth={isSel ? 2.5 : 1}
+                vectorEffect="non-scaling-stroke"
+                className="cursor-pointer hover:opacity-80"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (wasDrag()) return;
+                  toggleRegion(c.id, e.metaKey || e.ctrlKey);
+                }}
+              >
+                <title>{`${c.name}: ${n.toLocaleString("en-US")} ${legend} (click to select)`}</title>
+              </path>
             );
-            const cMax = Math.max(1, ...ns);
-            return list.map((c, i) => {
-              const id = `${stLower}-co-${countySlug(c.name)}`;
-              const n = ns[i];
-              const isSel = selectedDistrict === id;
-              // Log scale: one giant county must not wash out all the others
-              const t = n === 0 ? 0 : Math.log(1 + n) / Math.log(1 + cMax);
-              return (
-                <path
-                  key={id}
-                  d={c.d}
-                  fill={
-                    isSel
-                      ? "var(--brand-800)"
-                      : n === 0
-                        ? "white"
-                        : t > 0.6
-                          ? "var(--brand-600)"
-                          : t > 0.25
-                            ? "var(--brand-400)"
-                            : "var(--brand-200)"
-                  }
-                  fillOpacity={isSel ? 0.95 : 0.75}
-                  stroke={isSel ? "var(--brand-900)" : "#5b5470"}
-                  strokeWidth={isSel ? 2.5 : 1}
-                  vectorEffect="non-scaling-stroke"
-                  className="cursor-pointer hover:opacity-80"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    onSelectDistrict?.(isSel ? null : id);
-                  }}
-                >
-                  <title>{`${c.name} County: ${n.toLocaleString("en-US")} ${legend} (double click to select)`}</title>
-                </path>
-              );
-            });
-          })()}
+          })}
 
-        {/* Sub district boundaries fade in while zooming toward the city
-            and become double clickable at close zoom: one continuous map */}
+        {/* Council boundaries fade in while zooming toward the city and
+            become clickable at close zoom: one continuous map */}
         {outlineDistricts &&
           (council ?? []).map((c) => {
             const id = `nyc-cc-${c.num}`;
-            const isSel = selectedDistrict === id;
+            const isSel = selected.has(id);
             const n = councilCounts.get(id) ?? 0;
             return (
               <path
@@ -384,13 +512,11 @@ export function GeoMap({
                 className={showDistricts ? "cursor-pointer hover:opacity-85" : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
-                }}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  onSelectDistrict?.(isSel ? null : id);
+                  if (wasDrag()) return;
+                  toggleRegion(id, e.metaKey || e.ctrlKey);
                 }}
               >
-                <title>{`Council District ${c.num}: ${n.toLocaleString("en-US")} ${legend} (double click to select)`}</title>
+                <title>{`Council District ${c.num}: ${n.toLocaleString("en-US")} ${legend} (click to select)`}</title>
               </path>
             );
           })}
@@ -443,7 +569,11 @@ export function GeoMap({
           })}
         {vb[2] > 600 &&
           smallLabels.map((l) => (
-            <g key={l.abbr} className="cursor-pointer" onClick={() => clickState(l.abbr)}>
+            <g
+              key={l.abbr}
+              className="cursor-pointer"
+              onClick={(e) => clickState(l.abbr, e)}
+            >
               <line
                 x1={l.from[0]}
                 y1={l.from[1]}

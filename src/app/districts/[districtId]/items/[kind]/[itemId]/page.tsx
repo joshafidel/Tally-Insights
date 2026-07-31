@@ -8,7 +8,12 @@ import {
   logAccess,
   type ItemKind,
 } from "@/lib/insights";
-import { districtLabel, hasAudienceFilters, parseAudience } from "@/lib/filters";
+import {
+  districtLabel,
+  districtsLabel,
+  hasAudienceFilters,
+  parseAudience,
+} from "@/lib/filters";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/AppShell";
@@ -45,7 +50,7 @@ export default async function ItemDetailPage({
   const { districtId, kind, itemId: rawItemId } = await params;
   const audience = parseAudience(await searchParams);
   const audienceActive = hasAudienceFilters(audience);
-  const effectiveRoot = (audience.district ?? districtId).split("-")[0];
+  const effectiveRoot = (audience.districts[0] ?? districtId).split("-")[0];
   const itemId = decodeURIComponent(rawItemId);
   if (!KINDS.includes(kind as ItemKind)) notFound();
 
@@ -216,7 +221,10 @@ export default async function ItemDetailPage({
           </h2>
           {audienceActive && (
             <p className="mb-1 text-xs text-muted">
-              Scope: {districtLabel(audience.district ?? districtId)}
+              Scope:{" "}
+              {audience.districts.length
+                ? districtsLabel(audience.districts)
+                : districtLabel(districtId)}
               {audience.party.length + audience.age.length + audience.sex.length + audience.race.length > 0
                 ? " with demographic filters applied"
                 : ""}

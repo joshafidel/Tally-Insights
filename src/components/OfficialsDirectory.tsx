@@ -13,6 +13,7 @@ export type DirectoryEntry = {
   party: string;
   office: string;
   state: string;
+  district: string | null;
   level: "senate" | "house" | "state_local";
   votesRecorded: number;
   lastVoteDate: string | null;
@@ -63,16 +64,30 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("all");
   const [party, setParty] = useState("all");
-  const [state, setState] = useState<string | null>(null);
+  const [regions, setRegions] = useState<string[]>([]);
   const [sort, setSort] = useState("name");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // A region matches an official either as their whole state or, for a
+  // congressional district selection, as their exact seat. Selecting a
+  // district also keeps that state's senators in view.
+  const matchesRegion = (e: DirectoryEntry, r: string) => {
+    if (r.includes("-cd-")) {
+      return (
+        e.district === r ||
+        (e.level === "senate" && e.state === r.slice(0, 2).toUpperCase())
+      );
+    }
+    return e.state === r.toUpperCase() || (r === "nyc" && e.state === "NY");
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let rows = entries;
     if (level !== "all") rows = rows.filter((e) => e.level === level);
     if (party !== "all") rows = rows.filter((e) => e.party === party);
-    if (state) rows = rows.filter((e) => e.state === state);
+    if (regions.length)
+      rows = rows.filter((e) => regions.some((r) => matchesRegion(e, r)));
     if (q)
       rows = rows.filter(
         (e) =>
@@ -96,7 +111,8 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
       }
     });
     return sorted;
-  }, [entries, query, level, party, state, sort]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, query, level, party, regions, sort]);
 
   const mapCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -107,6 +123,15 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
     return counts;
   }, [entries, level, party]);
 
+  // Officials per congressional district drive the district shading.
+  const cdCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const e of entries) {
+      if (e.district) counts[e.district] = (counts[e.district] ?? 0) + 1;
+    }
+    return counts;
+  }, [entries]);
+
   const selected = entries.find((e) => e.id === selectedId) ?? null;
 
   return (
@@ -116,7 +141,15 @@ export function OfficialsDirectory({ entries }: { entries: DirectoryEntry[] }) {
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">
             Find officials on the map
           </h2>
-          <GeoMap counts={mapCounts} selectedState={state} onSelectState={setState} height={300} legend="officials" />
+          <GeoMap
+            counts={mapCounts}
+            selectedRegions={regions}
+            onSelectRegions={setRegions}
+            countyCounts={cdCounts}
+            subLayer="congressional"
+            height={300}
+            legend="officials"
+          />
         </div>
         {selected && (
           <div className="mt-6">

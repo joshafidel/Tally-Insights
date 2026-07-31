@@ -8,6 +8,7 @@ import {
   type DirectoryEntry,
 } from "@/components/OfficialsDirectory";
 import type { OfficialSummary } from "@/components/OfficialPicker";
+import { HOUSE_DISTRICT } from "@/lib/houseDistricts";
 
 const STATE_ABBR: Record<string, string> = {
   "New York": "NY", Vermont: "VT", Massachusetts: "MA", Pennsylvania: "PA",
@@ -126,6 +127,9 @@ export default async function OfficialsPage({
         party: first.official_party,
         office,
         state: stateGuess,
+        district: districtMatch
+          ? `${districtMatch[1].toLowerCase()}-cd-${parseInt(region.split("-")[1], 10)}`
+          : null,
         level,
         votesRecorded: rows.length,
         lastVoteDate: null,
@@ -169,8 +173,14 @@ export default async function OfficialsPage({
       id: m.member_key,
       name: m.member_name ?? m.member_key,
       party: m.party ?? "I",
-      office: m.chamber === "senate" ? "Senator" : "Representative",
+      office:
+        m.chamber === "senate"
+          ? "Senator"
+          : HOUSE_DISTRICT[m.member_key]
+            ? `Representative, ${(HOUSE_DISTRICT[m.member_key].split("-")[0] ?? "").toUpperCase()}-${HOUSE_DISTRICT[m.member_key].split("-")[2]}`
+            : "Representative",
       state: m.state ?? "",
+      district: m.chamber === "house" ? HOUSE_DISTRICT[m.member_key] ?? null : null,
       level: m.chamber === "senate" ? ("senate" as const) : ("house" as const),
       votesRecorded: m.votes_recorded,
       lastVoteDate: m.last_vote_date,
