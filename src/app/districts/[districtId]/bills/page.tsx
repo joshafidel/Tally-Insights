@@ -6,7 +6,7 @@ import {
   getFilteredOverview,
   logAccess,
 } from "@/lib/insights";
-import { districtLabel, districtsLabel, parseAudience } from "@/lib/filters";
+import { categoryLabel, districtLabel, districtsLabel, parseAudience } from "@/lib/filters";
 import { AppShell } from "@/components/AppShell";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { SampleSize } from "@/components/Sample";
@@ -37,13 +37,6 @@ export default async function BillsPage({
     district_id: audience.districts.join(",") || districtId,
   });
 
-  // Jurisdiction is its own axis: Federal, State, or City. Policy category
-  // stays a separate column and filter.
-  const jurisdictionOf = (b: (typeof bills)[number]) => {
-    if (b.kind === "live_bill") return "Federal";
-    if (b.id.startsWith("nyc-")) return "City (NYC)";
-    return "State";
-  };
   // With a region selected, only bills that region actually rated appear:
   // another state's or city's bills have no place in a Texas view.
   const scoped = audience.districts.length
@@ -54,8 +47,8 @@ export default async function BillsPage({
     kind: b.kind,
     status: b.status,
     title: b.title,
-    category: b.category ?? "Other",
-    jurisdiction: jurisdictionOf(b),
+    category: categoryLabel(b.category),
+    jurisdiction: b.jurisdiction ?? "Other",
     createdAt: null,
     mean: b.stats?.avg_value ?? null,
     distribution: b.stats?.distribution ?? null,

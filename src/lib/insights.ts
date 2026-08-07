@@ -14,6 +14,7 @@ export type CatalogItem = {
   summary: string | null;
   category: string | null;
   createdAt: string | null;
+  jurisdiction: string | null;
 };
 
 export type ItemStats = {
@@ -109,6 +110,7 @@ export const getCatalog = cache(async (): Promise<CatalogItem[]> => {
       summary: null,
       category: t.category,
       createdAt: t.created_at ?? null,
+      jurisdiction: null,
     });
   }
   for (const b of bills) {
@@ -121,6 +123,12 @@ export const getCatalog = cache(async (): Promise<CatalogItem[]> => {
       summary: null,
       category: b.topic_category ?? null,
       createdAt: null,
+      // Level comes from the chamber that carries the bill
+      jurisdiction: /us|congress|u\.s\./i.test(b.chamber ?? "")
+        ? "Federal"
+        : /nyc council/i.test(b.chamber ?? "")
+          ? "City (NYC)"
+          : "State",
     });
   }
   for (const lb of liveBills) {
@@ -133,6 +141,7 @@ export const getCatalog = cache(async (): Promise<CatalogItem[]> => {
       summary: null,
       category: lb.policy_area ?? null,
       createdAt: null,
+      jurisdiction: "Federal",
     });
   }
   return items;
@@ -191,6 +200,7 @@ export async function getDistrictOverview(
         summary: null,
         category: null,
         createdAt: null,
+        jurisdiction: null,
       });
     }
   }
@@ -321,7 +331,7 @@ export async function getItemDetail(
       item = {
         kind, id: t.id, title: t.title, subtitle: `Topic · ${t.category}`,
         status: null, summary: t.prompt, category: t.category,
-        createdAt: t.created_at ?? null,
+        createdAt: t.created_at ?? null, jurisdiction: null,
       };
   } else if (kind === "bill") {
     const { data: b } = await supabase
@@ -333,6 +343,11 @@ export async function getItemDetail(
       item = {
         kind, id: b.id, title: b.title, subtitle: `${b.chamber} · ${b.sponsor}`,
         status: b.status, summary: b.plain_summary, category: null, createdAt: null,
+        jurisdiction: /us|congress|u\.s\./i.test(b.chamber ?? "")
+          ? "Federal"
+          : /nyc council/i.test(b.chamber ?? "")
+            ? "City (NYC)"
+            : "State",
       };
   } else {
     const { data: lb } = await supabase
@@ -345,7 +360,7 @@ export async function getItemDetail(
         kind, id: lb.id, title: lb.title,
         subtitle: `${lb.label ?? lb.id}${lb.sponsor ? ` · ${lb.sponsor}` : ""}${lb.policy_area ? ` · ${lb.policy_area}` : ""}`,
         status: lb.status, summary: lb.gen_summary ?? lb.short_summary,
-        category: lb.policy_area ?? null, createdAt: null,
+        category: lb.policy_area ?? null, createdAt: null, jurisdiction: "Federal",
       };
   }
   if (!item && stats) {
@@ -359,6 +374,7 @@ export async function getItemDetail(
       summary: null,
       category: null,
       createdAt: null,
+      jurisdiction: null,
     };
   }
 
@@ -567,6 +583,7 @@ export async function getFilteredOverview(
         summary: null,
         category: null,
         createdAt: null,
+        jurisdiction: null,
       });
     }
   }

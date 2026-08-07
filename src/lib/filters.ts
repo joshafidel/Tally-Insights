@@ -35,7 +35,6 @@ export const CATEGORY_LABEL: Record<string, string> = {
   heal: "Healthcare",
   hous: "Housing",
   immi: "Immigration",
-  nyc: "New York City",
   pulse: "National pulse",
   safe: "Public safety",
   tech: "Technology",

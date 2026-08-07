@@ -194,7 +194,8 @@ export function TopicsTable({
       {openMenu && (
         <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
       )}
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[980px] text-sm">
         <thead className="bg-brand-50">
           <tr>
             <th className={th}>
@@ -211,7 +212,7 @@ export function TopicsTable({
                 Category{categories.size > 0 ? ` (${categories.size})` : ""} ▾
               </button>
               {openMenu === "category" && (
-                <div className="absolute left-2 top-full z-20 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-border bg-white p-2 shadow-lg">
+                <div className="absolute left-2 top-full z-20 mt-1 max-h-80 w-80 overflow-y-auto rounded-lg border border-border bg-white p-2 shadow-lg">
                   <button
                     type="button"
                     className="mb-1 w-full rounded px-2 py-1 text-left text-xs normal-case text-brand-700 hover:bg-brand-50"
@@ -397,6 +398,7 @@ export function TopicsTable({
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

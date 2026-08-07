@@ -127,14 +127,19 @@ export function OfficialsDirectory({
     return counts;
   }, [entries, level, party]);
 
-  // Officials per congressional district drive the district shading.
+  // Officials per congressional district drive the district shading, and
+  // it tracks the active level and party filters so picking Rep or Dem
+  // recolors the map by who would appear.
   const cdCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const e of entries) {
+    let rows = entries;
+    if (level !== "all") rows = rows.filter((e) => e.level === level);
+    if (party !== "all") rows = rows.filter((e) => e.party === party);
+    for (const e of rows) {
       if (e.district) counts[e.district] = (counts[e.district] ?? 0) + 1;
     }
     return counts;
-  }, [entries]);
+  }, [entries, level, party]);
 
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[460px_1fr]">

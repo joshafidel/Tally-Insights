@@ -24,7 +24,7 @@ export function AppShell({
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-brand-200 bg-gradient-to-r from-brand-50 via-card to-brand-50/60 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between px-6 py-3">
+        <div className="mx-auto flex w-full items-center justify-between px-6 py-3">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-800 text-sm font-bold text-white shadow-sm">
@@ -94,7 +94,7 @@ export function AppShell({
           ))}
         </nav>
       </header>
-      <main className="mx-auto w-full max-w-[1800px] px-4 py-5 md:px-6 md:py-6">{children}</main>
+      <main className="mx-auto w-full px-4 py-5 md:px-6 md:py-6">{children}</main>
     </div>
   );
 }
