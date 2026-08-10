@@ -27,7 +27,7 @@ export function TrendChart({ points }: { points: TrendChartPoint[] }) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={260}>
+    <ResponsiveContainer role="img" aria-label="Sentiment trend over time" width="100%" height={260}>
       <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="var(--border)" strokeDasharray="0" vertical={false} />
         <XAxis

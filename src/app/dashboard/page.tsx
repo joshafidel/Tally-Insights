@@ -12,6 +12,8 @@ import { DistBar } from "@/components/DistBar";
 import { createClient } from "@/lib/supabase/server";
 import { DOWN_COLOR, UP_COLOR } from "@/lib/format";
 
+export const metadata = { title: "Dashboard" };
+
 /* Support share: answers of 4 or 5 as a percentage of responses */
 function shares(item: OverviewItem) {
   const d = item.stats?.distribution;

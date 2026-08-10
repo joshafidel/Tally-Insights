@@ -16,6 +16,7 @@ import {
 } from "@/lib/filters";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { createClient } from "@/lib/supabase/server";
+import { cachedCatalogRaw } from "@/lib/contentCache";
 import { AppShell } from "@/components/AppShell";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { AgeCurveChart } from "@/components/charts/AgeCurveChart";
@@ -39,6 +40,22 @@ const SEX_LABELS: Record<string, string> = {
   x: "X on ID",
   unknown: "Not collected",
 };
+
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ districtId: string; kind: string; itemId: string }>;
+}) {
+  const { itemId } = await params;
+  const id = decodeURIComponent(itemId);
+  const raw = await cachedCatalogRaw().catch(() => null);
+  const title = raw
+    ? [...raw.topics, ...raw.bills, ...raw.liveBills].find((x) => x.id === id)
+        ?.title
+    : null;
+  return { title: title ?? "Item detail" };
+}
 
 export default async function ItemDetailPage({
   params,

@@ -15,8 +15,13 @@ export function DistBar({
   if (!distribution) return null;
   const total = distribution.reduce((a, b) => a + b, 0);
   if (total === 0) return null;
+  const LEVELS = ["strongly disagree", "disagree", "neutral", "agree", "strongly agree"];
   return (
     <div
+      role="img"
+      aria-label={`Response distribution: ${distribution
+        .map((c, i) => `${Math.round((c / total) * 100)}% ${LEVELS[i]}`)
+        .join(", ")}`}
       className={`flex h-2.5 w-32 items-stretch gap-[2px] ${className}`}
       title={distribution
         .map((c, i) => `${i + 1}: ${c} (${Math.round((c / total) * 100)}%)`)

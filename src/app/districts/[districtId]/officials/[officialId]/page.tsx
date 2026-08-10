@@ -15,6 +15,22 @@ const PARTY_COLOR: Record<string, string> = {
   ID: "var(--party-i)",
 };
 
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ districtId: string; officialId: string }>;
+}) {
+  const { officialId } = await params;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("insights_member_directory")
+    .select("member_name")
+    .eq("member_key", decodeURIComponent(officialId))
+    .maybeSingle();
+  return { title: data?.member_name ?? "Official profile" };
+}
+
 export default async function OfficialProfilePage({
   params,
 }: {
@@ -105,6 +121,7 @@ export default async function OfficialProfilePage({
         </Link>
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <span
+            aria-hidden="true"
             className="flex h-14 w-14 items-center justify-center rounded-full text-xl font-bold text-white"
             style={{ backgroundColor: PARTY_COLOR[party] ?? "var(--brand-500)" }}
           >

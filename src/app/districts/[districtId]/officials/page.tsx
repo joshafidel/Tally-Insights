@@ -10,6 +10,8 @@ import {
 import type { OfficialSummary } from "@/components/OfficialPicker";
 import { HOUSE_DISTRICT } from "@/lib/houseDistricts";
 
+export const metadata = { title: "Officials" };
+
 const STATE_ABBR: Record<string, string> = {
   "New York": "NY", Vermont: "VT", Massachusetts: "MA", Pennsylvania: "PA",
   Georgia: "GA", Louisiana: "LA", California: "CA", Kentucky: "KY",

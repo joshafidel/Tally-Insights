@@ -17,7 +17,7 @@ export function AgeCurveChart({
   points: { age: number; avg: number | null; n: number }[];
 }) {
   return (
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer role="img" aria-label="Mean sentiment by exact age" width="100%" height={220}>
       <LineChart data={points} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="var(--border)" vertical={false} />
         <XAxis

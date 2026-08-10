@@ -27,7 +27,7 @@ export function AppShell({
         <div className="mx-auto flex w-full items-center justify-between px-6 py-3">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-800 text-sm font-bold text-white shadow-sm">
+              <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-800 text-sm font-bold text-white shadow-sm">
                 T
               </span>
               <span className="text-lg font-semibold tracking-tight text-brand-900">
@@ -95,6 +95,14 @@ export function AppShell({
         </nav>
       </header>
       <main className="mx-auto w-full px-4 py-5 md:px-6 md:py-6">{children}</main>
+      <footer className="mt-auto border-t border-border bg-card/60 px-6 py-3 text-xs text-muted">
+        <div className="mx-auto flex w-full items-center justify-between">
+          <span>Tally Insights</span>
+          <Link href="/privacy" className="hover:text-brand-700 hover:underline">
+            Privacy policy
+          </Link>
+        </div>
+      </footer>
     </div>
   );
 }

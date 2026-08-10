@@ -13,6 +13,8 @@ import {
   toggleAlertRule,
 } from "./actions";
 
+export const metadata = { title: "Watchlist and alerts" };
+
 export default async function WatchlistPage({
   params,
 }: {

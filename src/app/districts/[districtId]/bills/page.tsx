@@ -12,6 +12,22 @@ import { FilterSidebar } from "@/components/FilterSidebar";
 import { SampleSize } from "@/components/Sample";
 import { TopicsTable, type TopicRow } from "@/components/TopicsTable";
 
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ districtId: string }>;
+  searchParams: Promise<Record<string, string>>;
+}) {
+  const { districtId } = await params;
+  const audience = parseAudience(await searchParams);
+  const scope = audience.districts.length
+    ? districtsLabel(audience.districts)
+    : districtLabel(districtId);
+  return { title: `Bills: ${scope}` };
+}
+
 export default async function BillsPage({
   params,
   searchParams,
