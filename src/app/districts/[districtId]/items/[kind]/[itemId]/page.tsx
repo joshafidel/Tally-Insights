@@ -177,13 +177,11 @@ export default async function ItemDetailPage({
 
   return (
     <AppShell ctx={ctx} districtId={districtId} active="Overview">
-      <div className="flex items-start gap-5">
-        <div className="hidden md:block">
-          <FilterSidebar
-            districts={availableDistricts}
-            hasExactFeature={ctx.features.includes("district_exact")}
-          />
-        </div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
+        <FilterSidebar
+          districts={availableDistricts}
+          hasExactFeature={ctx.features.includes("district_exact")}
+        />
         <div className="min-w-0 flex-1">
       <div className="mb-6">
         <Link

@@ -47,8 +47,8 @@ function TallyBars({
         {LEVELS.map((label, i) => {
           const pct = Math.round((d[i] / total) * 100);
           return (
-            <div key={label} className="flex items-center gap-3">
-              <div className="w-36 shrink-0 text-right text-sm font-medium text-brand-900">
+            <div key={label} className="flex items-center gap-2 sm:gap-3">
+              <div className="w-24 shrink-0 text-right text-xs font-medium text-brand-900 sm:w-36 sm:text-sm">
                 {label}
               </div>
               <div
@@ -93,13 +93,13 @@ function GroupRows({ groups }: { groups: GroupDistribution[] }) {
       {groups.map((g) => {
         const total = (g.distribution ?? []).reduce((a, b) => a + b, 0);
         return (
-          <div key={g.key} className="flex items-center gap-3">
-            <div className="flex w-36 shrink-0 items-center gap-2">
+          <div key={g.key} className="flex items-center gap-2 sm:gap-3">
+            <div className="flex w-24 shrink-0 items-center gap-2 sm:w-36">
               <span
                 className="h-3 w-3 shrink-0 rounded-full"
                 style={{ backgroundColor: g.color }}
               />
-              <span className="truncate text-sm">{g.label}</span>
+              <span className="truncate text-xs sm:text-sm">{g.label}</span>
             </div>
             <div className="flex h-6 flex-1 items-stretch gap-[2px]">
               {(g.distribution ?? [0, 0, 0, 0, 0]).map((count, i) => {
@@ -124,7 +124,7 @@ function GroupRows({ groups }: { groups: GroupDistribution[] }) {
                 );
               })}
             </div>
-            <div className="w-28 shrink-0 text-right text-sm tabular-nums">
+            <div className="w-20 shrink-0 text-right text-xs tabular-nums sm:w-28 sm:text-sm">
               <span className="font-semibold text-brand-800">
                 {g.avg != null ? g.avg.toFixed(2) : "n/a"}
               </span>{" "}
@@ -155,7 +155,7 @@ export function DistributionTabs({ data }: { data: DistributionTabsData }) {
 
   return (
     <div>
-      <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-border bg-white p-1">
+      <div className="mb-2 inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-border bg-white p-1">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -163,8 +163,8 @@ export function DistributionTabs({ data }: { data: DistributionTabsData }) {
             onClick={() => setTab(t.key)}
             className={
               tab === t.key
-                ? "rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white"
-                : "rounded-md px-3 py-1.5 text-xs text-muted hover:bg-brand-50"
+                ? "shrink-0 whitespace-nowrap rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white"
+                : "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs text-muted hover:bg-brand-50"
             }
           >
             {t.label}

@@ -24,7 +24,7 @@ export function AppShell({
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-brand-200 bg-gradient-to-r from-brand-50 via-card to-brand-50/60 backdrop-blur">
-        <div className="mx-auto flex w-full items-center justify-between px-6 py-3">
+        <div className="mx-auto flex w-full items-center justify-between px-4 py-3 md:px-6">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
               <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-800 text-sm font-bold text-white shadow-sm">
@@ -50,8 +50,8 @@ export function AppShell({
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="hidden text-right sm:block">
               <div className="text-sm font-medium">
                 {isGuestEmail(ctx.user.email)
                   ? "Guest preview"

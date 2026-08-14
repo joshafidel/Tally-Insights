@@ -186,7 +186,7 @@ export function TopicsTable({
   const indicator = (key: SortKey) =>
     sortKey === key ? (sortDesc ? " ▼" : " ▲") : "";
 
-  const th = "whitespace-nowrap px-4 py-2.5 font-medium text-left text-xs uppercase tracking-wide text-muted select-none";
+  const th = "whitespace-nowrap px-3 py-2.5 font-medium text-left text-xs uppercase tracking-wide text-muted select-none";
   const btn = "hover:text-brand-800 cursor-pointer";
 
   return (
@@ -195,7 +195,7 @@ export function TopicsTable({
         <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
       )}
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[980px] text-sm">
+      <table className="w-full min-w-[920px] text-sm">
         <thead className="bg-brand-50">
           <tr>
             <th className={th}>
@@ -348,7 +348,7 @@ export function TopicsTable({
         <tbody>
           {filtered.map((r) => (
             <tr key={r.id} className="border-t border-border hover:bg-brand-50/50">
-              <td className="min-w-[280px] max-w-[520px] px-4 py-2.5">
+              <td className="min-w-[240px] max-w-[520px] px-3 py-2.5">
                 <Link
                   href={`/districts/${districtId}/items/${r.kind}/${encodeURIComponent(r.id)}${qs}`}
                   className="line-clamp-2 font-medium text-brand-800 hover:underline"
@@ -357,15 +357,15 @@ export function TopicsTable({
                   {r.title}
                 </Link>
               </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-muted">{r.category ?? "Other"}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-muted">{r.category ?? "Other"}</td>
               {showJurisdiction && (
-                <td className="whitespace-nowrap px-4 py-2.5 text-muted">
+                <td className="whitespace-nowrap px-3 py-2.5 text-muted">
                   {r.jurisdiction ?? "Other"}
                 </td>
               )}
-              {showStatus && <td className="px-4 py-2.5 capitalize text-muted">{(r.status ?? "").replaceAll("_", " ")}</td>}
-              {showAdded && <td className="whitespace-nowrap px-4 py-2.5 text-muted">{fmtDate(r.createdAt)}</td>}
-              <td className="px-4 py-2.5 text-right">
+              {showStatus && <td className="px-3 py-2.5 capitalize text-muted">{(r.status ?? "").replaceAll("_", " ")}</td>}
+              {showAdded && <td className="whitespace-nowrap px-3 py-2.5 text-muted">{fmtDate(r.createdAt)}</td>}
+              <td className="px-3 py-2.5 text-right">
                 {r.mean != null ? (
                   <span className="text-base font-semibold tabular-nums text-brand-800">
                     {r.mean.toFixed(2)}
@@ -374,16 +374,16 @@ export function TopicsTable({
                   <span className="text-xs text-muted">no responses yet</span>
                 )}
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-3 py-2.5">
                 <DistBar distribution={r.distribution} />
               </td>
-              <td className="px-4 py-2.5 text-right tabular-nums">
+              <td className="px-3 py-2.5 text-right tabular-nums">
                 {r.n.toLocaleString("en-US")}
               </td>
-              <td className="px-4 py-2.5 text-right tabular-nums"><DeltaCell v={r.change7} /></td>
-              <td className="px-4 py-2.5 text-right tabular-nums"><DeltaCell v={r.change30} /></td>
+              <td className="px-3 py-2.5 text-right tabular-nums"><DeltaCell v={r.change7} /></td>
+              <td className="px-3 py-2.5 text-right tabular-nums"><DeltaCell v={r.change30} /></td>
               {canTrack && (
-                <td className="px-4 py-2.5">
+                <td className="px-3 py-2.5">
                   <TrackButton row={r} districtId={districtId} orgId={orgId} />
                 </td>
               )}

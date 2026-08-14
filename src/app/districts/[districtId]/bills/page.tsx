@@ -74,19 +74,20 @@ export default async function BillsPage({
     tracked: b.tracked,
   }));
   const totalResponses = rows.reduce((a, r) => a + r.n, 0);
+  const qs = new URLSearchParams(
+    Object.entries(sp).filter(([, v]) => typeof v === "string") as [string, string][]
+  ).toString();
   const scope = audience.districts.length
     ? districtsLabel(audience.districts)
     : districtLabel(districtId);
 
   return (
     <AppShell ctx={ctx} districtId={districtId} active="Bills">
-      <div className="flex items-start gap-5">
-        <div className="hidden md:block">
-          <FilterSidebar
-            districts={availableDistricts}
-            hasExactFeature={ctx.features.includes("district_exact")}
-          />
-        </div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
+        <FilterSidebar
+          districts={availableDistricts}
+          hasExactFeature={ctx.features.includes("district_exact")}
+        />
         <div className="min-w-0 flex-1">
           <div className="mb-5">
             <h1 className="text-2xl font-semibold tracking-tight text-brand-900">
@@ -99,7 +100,7 @@ export default async function BillsPage({
             </p>
           </div>
 
-          <div className="mb-5 grid grid-cols-3 gap-4">
+          <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
             {[
               { label: "Bills", value: rows.length },
               { label: "Responses in view", value: totalResponses },
@@ -138,22 +139,36 @@ export default async function BillsPage({
             />
           </div>
           <section className="space-y-3 md:hidden">
-            {rows.slice(0, 30).map((r) => (
+            {rows.slice(0, 80).map((r) => (
               <Link
                 key={`${r.kind}:${r.id}`}
-                href={`/districts/${districtId}/items/${r.kind}/${encodeURIComponent(r.id)}`}
+                href={`/districts/${districtId}/items/${r.kind}/${encodeURIComponent(r.id)}${qs ? `?${qs}` : ""}`}
                 className="block rounded-xl border border-border bg-card p-4"
               >
                 <div className="mb-1 text-sm font-medium">{r.title}</div>
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                   <span className="font-semibold tabular-nums text-brand-800">
                     {r.mean?.toFixed(2) ?? "0"}
                   </span>
+                  {r.change7 != null && r.change7 !== 0 && (
+                    <span
+                      className="text-xs font-medium tabular-nums"
+                      style={{ color: r.change7 > 0 ? "#15803d" : "#b91c1c" }}
+                    >
+                      {r.change7 > 0 ? "▲" : "▼"} {Math.abs(r.change7).toFixed(2)} in 7d
+                    </span>
+                  )}
                   <SampleSize n={r.n} />
-                  <span className="text-xs text-muted">{r.category}</span>
+                  <span className="ml-auto text-xs text-muted">{r.category}</span>
                 </div>
               </Link>
             ))}
+            {rows.length > 80 && (
+              <p className="text-center text-xs text-muted">
+                Showing the first 80 of {rows.length} bills. The full sortable
+                table is available on a larger screen.
+              </p>
+            )}
           </section>
         </div>
       </div>

@@ -94,6 +94,11 @@ export function FilterSidebar({
   const sp = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(true);
+  // Phones start collapsed so the content is not pushed below a tall panel;
+  // desktop keeps the sidebar open alongside the content.
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 1023px)").matches) setOpen(false);
+  }, []);
   const [query, setQuery] = useState("");
   // Optimistic region selection: the map and breadcrumb move instantly
   // while the server render for the new audience streams in.
@@ -275,22 +280,38 @@ export function FilterSidebar({
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="sticky top-20 flex h-fit flex-col items-center gap-2 rounded-xl border border-border bg-card px-2 py-3 text-xs text-muted shadow-sm hover:bg-brand-50"
-        title="Open filters"
-      >
-        <span>▶</span>
-        <span style={{ writingMode: "vertical-rl" }}>
-          Filters{activeCount > 0 ? ` (${activeCount})` : ""}
-        </span>
-      </button>
+      <div className="h-fit shrink-0 lg:sticky lg:top-20">
+        {/* Phone: a full width bar above the content */}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-4 py-2.5 text-sm shadow-sm hover:bg-brand-50 lg:hidden"
+        >
+          <span className="font-medium text-brand-900">
+            Filter the audience{activeCount > 0 ? ` (${activeCount})` : ""}
+          </span>
+          <span className="text-xs text-muted">
+            {regions.length ? regions.map((r) => districtLabel(r)).join(" + ") : "United States"} ▾
+          </span>
+        </button>
+        {/* Desktop: a slim vertical rail beside the content */}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="hidden flex-col items-center gap-2 rounded-xl border border-border bg-card px-2 py-3 text-xs text-muted shadow-sm hover:bg-brand-50 lg:flex"
+          title="Open filters"
+        >
+          <span>▶</span>
+          <span style={{ writingMode: "vertical-rl" }}>
+            Filters{activeCount > 0 ? ` (${activeCount})` : ""}
+          </span>
+        </button>
+      </div>
     );
   }
 
   return (
-    <aside className="sticky top-20 h-fit w-[440px] shrink-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <aside className="h-fit w-full shrink-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:sticky lg:top-20 lg:w-[440px]">
       <div className="flex items-center justify-between border-b border-border bg-brand-50 px-3 py-2">
         <span className="text-sm font-semibold text-brand-900">
           Filter the audience{activeCount > 0 ? ` (${activeCount})` : ""}
@@ -313,10 +334,11 @@ export function FilterSidebar({
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="text-muted hover:text-brand-800"
+            className="text-xs text-muted hover:text-brand-800"
             title="Collapse"
           >
-            ◀
+            <span className="lg:hidden">Hide</span>
+            <span className="hidden lg:inline">◀</span>
           </button>
         </div>
       </div>
