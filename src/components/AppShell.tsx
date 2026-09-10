@@ -27,9 +27,14 @@ export function AppShell({
         <div className="mx-auto flex w-full items-center justify-between px-4 py-3 md:px-6">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
-              <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-800 text-sm font-bold text-white shadow-sm">
-                T
-              </span>
+              {/* The Insights mark: white T over ascending bars, same tile
+                  family as the consumer Tally app icon */}
+              <img
+                src="/icon.png"
+                alt=""
+                aria-hidden="true"
+                className="h-8 w-8 rounded-lg shadow-sm"
+              />
               <span className="text-lg font-semibold tracking-tight text-brand-900">
                 Tally <span className="font-normal text-brand-600">Insights</span>
               </span>
